@@ -1,12 +1,18 @@
 // app/_layout.tsx
+import { initNotificationsConfig } from "@/core/notifications/notifications";
+import { initDatabase } from "@/data/sqlite/database";
 import { Stack } from "expo-router";
+import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { initDatabase } from "@/data/sqlite/database";
 
 export default function RootLayout() {
   initDatabase();
+
+  useEffect(() => {
+    initNotificationsConfig();
+  }, []);
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>

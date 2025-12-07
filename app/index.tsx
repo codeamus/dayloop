@@ -9,6 +9,15 @@ import {
   View,
 } from "react-native";
 
+import { scheduleDailyReminder } from "@/core/notifications/notifications";
+
+async function handleScheduleReminder() {
+  // Por ahora: hora fija 21:00
+  await scheduleDailyReminder(21, 0);
+  // luego puedes meter un toast/snackbar si quieres
+  console.log("Recordatorio diario programado para las 21:00");
+}
+
 export default function TodayScreen() {
   const { loading, habits, toggle } = useTodayHabits();
 
@@ -34,6 +43,14 @@ export default function TodayScreen() {
             hitSlop={10}
           >
             <Text style={styles.secondaryButtonText}>Hábitos</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={handleScheduleReminder}
+            style={styles.secondaryButton}
+            hitSlop={10}
+          >
+            <Text style={styles.secondaryButtonText}>📲 Recordatorio</Text>
           </Pressable>
 
           <Pressable
