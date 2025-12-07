@@ -38,19 +38,27 @@ export default function TodayScreen() {
 
         <View style={{ flexDirection: "row", gap: 8 }}>
           <Pressable
+            onPress={() => router.push("/stats")}
+            style={styles.secondaryButton}
+            hitSlop={10}
+          >
+            <Text style={styles.secondaryButtonText}>Stats</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.push("/settings")}
+            style={styles.secondaryButton}
+            hitSlop={10}
+          >
+            <Text style={styles.secondaryButtonText}>Ajustes</Text>
+          </Pressable>
+
+          <Pressable
             onPress={() => router.push("/habits")}
             style={styles.secondaryButton}
             hitSlop={10}
           >
             <Text style={styles.secondaryButtonText}>Hábitos</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={handleScheduleReminder}
-            style={styles.secondaryButton}
-            hitSlop={10}
-          >
-            <Text style={styles.secondaryButtonText}>📲 Recordatorio</Text>
           </Pressable>
 
           <Pressable
