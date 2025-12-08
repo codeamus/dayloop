@@ -5,13 +5,13 @@ import { useHabit } from "@/presentation/hooks/useHabit";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import {
-     ActivityIndicator,
-     Alert,
-     Pressable,
-     StyleSheet,
-     Text,
-     TextInput,
-     View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 const WEEK_DAYS = [
@@ -24,6 +24,10 @@ const WEEK_DAYS = [
   { label: "S", value: 6 },
 ];
 
+const COLOR_PRESETS = ["#38BDF8", "#A855F7", "#F97316", "#22C55E", "#E11D48"];
+const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
+
+
 export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const habitId = Array.isArray(id) ? id[0] : id;
@@ -35,10 +39,15 @@ export default function EditHabitScreen() {
     useState<HabitSchedule["type"]>("daily");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
+  const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
+  const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
+
+
   // Inicializar el state cuando ya tenemos el hábito
   useMemo(() => {
     if (!habit) return;
     setName(habit.name);
+
     if (habit.schedule.type === "daily") {
       setScheduleType("daily");
       setSelectedDays([]);
@@ -46,7 +55,11 @@ export default function EditHabitScreen() {
       setScheduleType("weekly");
       setSelectedDays(habit.schedule.daysOfWeek);
     }
+
+    setColor(habit.color || COLOR_PRESETS[0]);
+    setIcon(habit.icon || ICON_PRESETS[0]);
   }, [habit]);
+
 
   function toggleWeekDay(day: number) {
     setSelectedDays((prev) =>
@@ -85,8 +98,11 @@ export default function EditHabitScreen() {
       ...habit,
       name: trimmed,
       schedule,
-      // TODO: más adelante: color/icon editables también
+      color,
+      icon,
     };
+
+
 
     await container.updateHabit.execute(updated);
     router.back();
@@ -154,6 +170,48 @@ export default function EditHabitScreen() {
         value={name}
         onChangeText={setName}
       />
+
+      <Text style={styles.label}>Color</Text>
+      <View style={styles.colorsRow}>
+        {COLOR_PRESETS.map((c) => {
+          const active = c === color;
+          return (
+            <Pressable
+              key={c}
+              onPress={() => setColor(c)}
+              style={[
+                styles.colorDotWrapper,
+                active && styles.colorDotWrapperActive,
+              ]}
+            >
+              <View style={[styles.colorDot, { backgroundColor: c }]} />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Text style={styles.label}>Icono</Text>
+      <View style={styles.iconsRow}>
+        {ICON_PRESETS.map((i) => {
+          const active = i === icon;
+          return (
+            <Pressable
+              key={i}
+              onPress={() => setIcon(i)}
+              style={[styles.iconChip, active && styles.iconChipActive]}
+            >
+              <Text
+                style={[
+                  styles.iconChipText,
+                  active && styles.iconChipTextActive,
+                ]}
+              >
+                {i}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <Text style={styles.label}>Frecuencia</Text>
 
@@ -342,5 +400,50 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     fontWeight: "700",
     fontSize: 16,
+  },
+  colorsRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  colorDotWrapper: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  colorDotWrapperActive: {
+    borderColor: "#38BDF8",
+  },
+  colorDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+  },
+  iconsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  iconChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  iconChipActive: {
+    backgroundColor: "#38BDF8",
+    borderColor: "#38BDF8",
+  },
+  iconChipText: {
+    fontSize: 16,
+  },
+  iconChipTextActive: {
+    color: "#0F172A",
+    fontWeight: "600",
   },
 });

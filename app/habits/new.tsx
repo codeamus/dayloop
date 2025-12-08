@@ -23,14 +23,17 @@ const WEEK_DAYS = [
   { label: "S", value: 6 },
 ];
 
+const COLOR_PRESETS = ["#38BDF8", "#A855F7", "#F97316", "#22C55E", "#E11D48"];
+const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
+
 export default function NewHabit() {
   const [name, setName] = useState("");
   const [scheduleType, setScheduleType] =
     useState<HabitSchedule["type"]>("daily");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
 
-  const DEFAULT_COLOR = "#22D3EE";
-  const DEFAULT_ICON = "⭐";
+  const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
+  const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
 
   function toggleWeekDay(day: number) {
     setSelectedDays((prev) =>
@@ -65,8 +68,8 @@ export default function NewHabit() {
 
     await container.createHabit.execute({
       name: trimmed,
-      color: DEFAULT_COLOR,
-      icon: DEFAULT_ICON,
+      color,
+      icon,
       schedule,
     });
 
@@ -87,7 +90,6 @@ export default function NewHabit() {
         </Pressable>
 
         <Text style={styles.headerTitle}>Nuevo hábito</Text>
-        {/* placeholder para balancear el header */}
         <View style={{ width: 70 }} />
       </View>
 
@@ -99,6 +101,50 @@ export default function NewHabit() {
         value={name}
         onChangeText={setName}
       />
+
+      {/* Color */}
+      <Text style={styles.label}>Color</Text>
+      <View style={styles.colorsRow}>
+        {COLOR_PRESETS.map((c) => {
+          const active = c === color;
+          return (
+            <Pressable
+              key={c}
+              onPress={() => setColor(c)}
+              style={[
+                styles.colorDotWrapper,
+                active && styles.colorDotWrapperActive,
+              ]}
+            >
+              <View style={[styles.colorDot, { backgroundColor: c }]} />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* Icono */}
+      <Text style={styles.label}>Icono</Text>
+      <View style={styles.iconsRow}>
+        {ICON_PRESETS.map((i) => {
+          const active = i === icon;
+          return (
+            <Pressable
+              key={i}
+              onPress={() => setIcon(i)}
+              style={[styles.iconChip, active && styles.iconChipActive]}
+            >
+              <Text
+                style={[
+                  styles.iconChipText,
+                  active && styles.iconChipTextActive,
+                ]}
+              >
+                {i}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <Text style={styles.label}>Frecuencia</Text>
 
@@ -209,6 +255,54 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
   },
+
+  colorsRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+  },
+  colorDotWrapper: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  colorDotWrapperActive: {
+    borderColor: "#38BDF8",
+  },
+  colorDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+  },
+
+  iconsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  iconChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  iconChipActive: {
+    backgroundColor: "#38BDF8",
+    borderColor: "#38BDF8",
+  },
+  iconChipText: {
+    fontSize: 16,
+  },
+  iconChipTextActive: {
+    color: "#0F172A",
+    fontWeight: "600",
+  },
+
   segmentContainer: {
     flexDirection: "row",
     backgroundColor: "#020617",
