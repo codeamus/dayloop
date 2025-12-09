@@ -11,6 +11,7 @@ export class CreateHabit {
     color: string;
     icon: string;
     schedule: Habit["schedule"];
+    timeOfDay: Habit["timeOfDay"];
   }) {
     const habit: Habit = {
       id: randomUUID(),
@@ -18,6 +19,7 @@ export class CreateHabit {
       color: input.color,
       icon: input.icon,
       schedule: input.schedule,
+      timeOfDay: input.timeOfDay,
     };
 
     await this.habitRepository.create(habit);

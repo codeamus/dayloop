@@ -2,6 +2,7 @@
 import { container } from "@/core/di/container";
 import type { HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
+import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -35,6 +36,8 @@ export default function NewHabit() {
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
 
+  const [time, setTime] = useState("08:00"); // string "HH:mm"
+
   function toggleWeekDay(day: number) {
     setSelectedDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
@@ -66,11 +69,14 @@ export default function NewHabit() {
       };
     }
 
+    const timeOfDay = getTimeOfDayFromHour(time);
+
     await container.createHabit.execute({
       name: trimmed,
       color,
       icon,
       schedule,
+      timeOfDay,
     });
 
     router.back();
@@ -207,6 +213,15 @@ export default function NewHabit() {
           })}
         </View>
       )}
+
+      <Text style={styles.label}>Hora</Text>
+      <TextInput
+        placeholder="Ej: 08:00"
+        placeholderTextColor="#64748B"
+        style={styles.input}
+        value={time}
+        onChangeText={setTime}
+      />
 
       <Pressable onPress={save} style={styles.btn}>
         <Text style={styles.btnText}>Guardar</Text>

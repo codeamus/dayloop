@@ -11,4 +11,5 @@ export interface Habit {
   color: string;
   icon: string;
   schedule: HabitSchedule;
+  timeOfDay?: "morning" | "afternoon" | "evening";
 }
