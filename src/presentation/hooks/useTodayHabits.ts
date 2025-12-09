@@ -24,13 +24,6 @@ function getScheduleType(habit: any): FrequencyType {
   return "daily";
 }
 
-function getTimeOfDay(habit: any): TimeOfDay | undefined {
-  const slot = habit?.timeOfDay;
-  if (slot === "morning" || slot === "afternoon" || slot === "evening") {
-    return slot;
-  }
-  return undefined;
-}
 
 export function useTodayHabits() {
   const [loading, setLoading] = useState(true);
