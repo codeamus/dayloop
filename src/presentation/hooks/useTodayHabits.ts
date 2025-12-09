@@ -42,7 +42,6 @@ export function useTodayHabits() {
     const result = await container.getTodayHabits.execute(todayStr());
     // result: [{ habit, done }]
     const mapped: TodayHabitVM[] = result.map(({ habit, done }: any) => {
-      console.log(habit)
       return {
         id: habit.id,
         name: habit.name,
