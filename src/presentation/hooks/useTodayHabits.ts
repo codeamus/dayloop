@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+export type FrequencyType = "daily" | "weekly" | "monthly";
 
 export type TodayHabitVM = {
   id: string;
@@ -13,8 +14,23 @@ export type TodayHabitVM = {
   done: boolean;
   color: string;
   icon: string;
+  scheduleType: FrequencyType;
   timeOfDay?: TimeOfDay;
 };
+
+function getScheduleType(habit: any): FrequencyType {
+  const t = habit?.schedule?.type;
+  if (t === "weekly" || t === "monthly") return t;
+  return "daily";
+}
+
+function getTimeOfDay(habit: any): TimeOfDay | undefined {
+  const slot = habit?.timeOfDay;
+  if (slot === "morning" || slot === "afternoon" || slot === "evening") {
+    return slot;
+  }
+  return undefined;
+}
 
 export function useTodayHabits() {
   const [loading, setLoading] = useState(true);
@@ -22,18 +38,23 @@ export function useTodayHabits() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const result = await container.getTodayHabits.execute(todayStr());
 
-    setHabits(
-      result.map(({ habit, done }: any) => ({
+    const result = await container.getTodayHabits.execute(todayStr());
+    // result: [{ habit, done }]
+    const mapped: TodayHabitVM[] = result.map(({ habit, done }: any) => {
+      console.log(habit)
+      return {
         id: habit.id,
         name: habit.name,
         color: habit.color,
         icon: habit.icon,
         done,
+        scheduleType: getScheduleType(habit),
         timeOfDay: habit.timeOfDay,
-      }))
-    );
+      };
+    });
+
+    setHabits(mapped);
     setLoading(false);
   }, []);
 

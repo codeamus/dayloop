@@ -4,12 +4,12 @@ import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-     ActivityIndicator,
-     Pressable,
-     ScrollView,
-     StyleSheet,
-     Text,
-     View,
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 type FrequencyTab = "daily" | "weekly" | "monthly";
@@ -34,17 +34,11 @@ export default function TodayScreen() {
   }
 
   // 1) Filtro por frecuencia
-  const byFrequency = habits.filter((h) => {
-    const type = (h as any).scheduleType as FrequencyTab | undefined;
-    if (!type) return true; // si aún no lo tienes mapeado, no rompe
-    return type === frequencyTab;
-  });
-
+  const byFrequency = habits.filter((h) => h.scheduleType === frequencyTab);
   // 2) Filtro por franja horaria
   const filtered = byFrequency.filter((h) => {
     if (timeTab === "all") return true;
-    const slot = (h as any).timeOfDay as TimeTab | undefined;
-    return slot === timeTab;
+    return h.timeOfDay === timeTab;
   });
 
   const pending = filtered.filter((h) => !h.done);

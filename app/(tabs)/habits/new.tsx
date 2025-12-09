@@ -77,6 +77,7 @@ export default function NewHabit() {
       icon,
       schedule,
       timeOfDay,
+      time,
     });
 
     router.back();

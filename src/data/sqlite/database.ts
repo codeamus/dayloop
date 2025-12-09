@@ -1,4 +1,3 @@
-// src/data/sqlite/database.ts
 import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
@@ -14,7 +13,9 @@ export function initDatabase() {
       color TEXT NOT NULL,
       icon TEXT NOT NULL,
       schedule_type TEXT NOT NULL,
-      schedule_days TEXT
+      schedule_days TEXT,
+      time_of_day TEXT,
+      time TEXT
     );
 
     CREATE TABLE IF NOT EXISTS habit_logs (

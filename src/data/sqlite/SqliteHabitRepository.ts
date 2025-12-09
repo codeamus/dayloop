@@ -12,6 +12,8 @@ export class SqliteHabitRepository implements HabitRepository {
       icon: string;
       schedule_type: string;
       schedule_days: string | null;
+      time_of_day: string;
+      time: string;
     }>("SELECT * FROM habits");
 
     return rows.map((row) => ({
@@ -28,6 +30,8 @@ export class SqliteHabitRepository implements HabitRepository {
                 ? JSON.parse(row.schedule_days)
                 : [],
             },
+      timeOfDay: row.time_of_day as "morning" | "afternoon" | "evening",
+      time: row.time,
     }));
   }
 
@@ -50,14 +54,16 @@ export class SqliteHabitRepository implements HabitRepository {
                 ? JSON.parse(row.schedule_days)
                 : [],
             },
+      timeOfDay: row.time_of_day,
+      time: row.time,
     };
   }
 
   async create(habit: Habit): Promise<void> {
     db.runSync(
       `
-      INSERT INTO habits (id, name, color, icon, schedule_type, schedule_days)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO habits (id, name, color, icon, schedule_type, schedule_days, time_of_day, time)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         habit.id,
@@ -68,6 +74,8 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.schedule.type === "weekly"
           ? JSON.stringify(habit.schedule.daysOfWeek)
           : null,
+        habit.timeOfDay,
+        habit.time,
       ]
     );
   }
@@ -76,7 +84,14 @@ export class SqliteHabitRepository implements HabitRepository {
     db.runSync(
       `
       UPDATE habits
-      SET name = ?, color = ?, icon = ?, schedule_type = ?, schedule_days = ?
+      SET
+        name = ?,
+        color = ?,
+        icon = ?,
+        schedule_type = ?,
+        schedule_days = ?,
+        time_of_day = ?,
+        time = ?
       WHERE id = ?
     `,
       [
@@ -88,6 +103,8 @@ export class SqliteHabitRepository implements HabitRepository {
           ? JSON.stringify(habit.schedule.daysOfWeek)
           : null,
         habit.id,
+        habit.timeOfDay,
+        habit.time,
       ]
     );
   }

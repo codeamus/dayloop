@@ -2,6 +2,7 @@ import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
+import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -27,7 +28,6 @@ const WEEK_DAYS = [
 const COLOR_PRESETS = ["#38BDF8", "#A855F7", "#F97316", "#22C55E", "#E11D48"];
 const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
 
-
 export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const habitId = Array.isArray(id) ? id[0] : id;
@@ -42,6 +42,7 @@ export default function EditHabitScreen() {
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
 
+  const [time, setTime] = useState(""); 
 
   // Inicializar el state cuando ya tenemos el hábito
   useMemo(() => {
@@ -58,8 +59,9 @@ export default function EditHabitScreen() {
 
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || ICON_PRESETS[0]);
-  }, [habit]);
 
+    setTime(habit.time);
+  }, [habit]);
 
   function toggleWeekDay(day: number) {
     setSelectedDays((prev) =>
@@ -94,15 +96,17 @@ export default function EditHabitScreen() {
       };
     }
 
+    const timeOfDay = getTimeOfDayFromHour(time);
+    
     const updated: Habit = {
       ...habit,
       name: trimmed,
       schedule,
       color,
       icon,
+      time,
+      timeOfDay,
     };
-
-
 
     await container.updateHabit.execute(updated);
     router.back();
@@ -274,6 +278,15 @@ export default function EditHabitScreen() {
           })}
         </View>
       )}
+
+      <Text style={styles.label}>Hora</Text>
+      <TextInput
+        placeholder="Ej: 08:00"
+        placeholderTextColor="#64748B"
+        style={styles.input}
+        value={time}
+        onChangeText={setTime}
+      />
 
       <Pressable onPress={handleSave} style={styles.btn}>
         <Text style={styles.btnText}>Guardar cambios</Text>
