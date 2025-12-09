@@ -4,12 +4,12 @@ import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+     ActivityIndicator,
+     Pressable,
+     ScrollView,
+     StyleSheet,
+     Text,
+     View,
 } from "react-native";
 
 type FrequencyTab = "daily" | "weekly" | "monthly";
