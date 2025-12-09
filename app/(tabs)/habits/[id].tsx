@@ -2,6 +2,7 @@ import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
+import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -31,6 +32,8 @@ const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", 
 export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const habitId = Array.isArray(id) ? id[0] : id;
+
+  const { streak } = useHabitStreak(habitId);
 
   const { habit, loading } = useHabit(habitId);
 
@@ -174,6 +177,45 @@ export default function EditHabitScreen() {
           <Text style={styles.deleteButtonText}>Eliminar</Text>
         </Pressable>
       </View>
+
+      {/* Bloque de streaks */}
+      {!loading && streak && (
+        <View style={styles.streakCard}>
+          <Text style={styles.streakTitle}>Rachas</Text>
+
+          <View style={styles.streakRow}>
+            <Text style={styles.streakLabel}>Racha diaria actual</Text>
+            <Text style={styles.streakValue}>
+              {streak.currentDailyStreak} días
+            </Text>
+          </View>
+
+          <View style={styles.streakRow}>
+            <Text style={styles.streakLabel}>Mejor racha diaria</Text>
+            <Text style={styles.streakValue}>
+              {streak.bestDailyStreak} días
+            </Text>
+          </View>
+
+          {streak.bestWeeklyStreak > 0 && (
+            <>
+              <View style={styles.streakRow}>
+                <Text style={styles.streakLabel}>Racha semanal actual</Text>
+                <Text style={styles.streakValue}>
+                  {streak.currentWeeklyStreak} semanas
+                </Text>
+              </View>
+
+              <View style={styles.streakRow}>
+                <Text style={styles.streakLabel}>Mejor racha semanal</Text>
+                <Text style={styles.streakValue}>
+                  {streak.bestWeeklyStreak} semanas
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+      )}
 
       <Text style={styles.label}>Nombre</Text>
       <TextInput
@@ -466,6 +508,34 @@ const styles = StyleSheet.create({
   },
   iconChipTextActive: {
     color: "#0F172A",
+    fontWeight: "600",
+  },
+  streakCard: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#020617",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  streakTitle: {
+    color: "#E5E7EB",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  streakRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
+  streakLabel: {
+    color: "#9CA3AF",
+    fontSize: 13,
+  },
+  streakValue: {
+    color: "#E5E7EB",
+    fontSize: 13,
     fontWeight: "600",
   },
 });
