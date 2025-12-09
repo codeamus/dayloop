@@ -1,5 +1,11 @@
 // src/data/sqlite/SqliteHabitRepository.ts
-import type { Habit, HabitId } from "@/domain/entities/Habit";
+import type {
+  EndCondition,
+  Habit,
+  HabitId,
+  HabitSchedule,
+  TimeOfDay,
+} from "@/domain/entities/Habit";
 import type { HabitRepository } from "@/domain/repositories/HabitRepository";
 import { db } from "./database";
 
@@ -10,65 +16,108 @@ export class SqliteHabitRepository implements HabitRepository {
       name: string;
       color: string;
       icon: string;
-      schedule_type: string;
-      schedule_days: string | null;
-      time_of_day: string;
-      time: string;
+      schedule_type: string; // "daily" | "weekly"
+      schedule_days: string | null; // JSON: [0,1,2,...] o null
+      end_condition: string | null; // JSON o null
+      time_of_day: string | null; // "morning" | "afternoon" | "evening" | null
+      time: string | null; // "HH:mm" | null
     }>("SELECT * FROM habits");
 
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      color: row.color,
-      icon: row.icon,
-      schedule:
-        row.schedule_type === "daily"
-          ? { type: "daily" }
-          : {
-              type: "weekly",
-              daysOfWeek: row.schedule_days
-                ? JSON.parse(row.schedule_days)
-                : [],
-            },
-      endCondition: row.end_condition
-        ? JSON.parse(row.end_condition)
-        : { type: "none" },
-      timeOfDay: row.time_of_day as "morning" | "afternoon" | "evening",
-      time: row.time,
-    }));
+    return rows.map((row) => {
+      const days: number[] =
+        row.schedule_days != null ? JSON.parse(row.schedule_days) : [];
+
+      const schedule: HabitSchedule =
+        row.schedule_type === "weekly"
+          ? { type: "weekly", daysOfWeek: days }
+          : { type: "daily", daysOfWeek: days };
+
+      const endCondition: EndCondition =
+        row.end_condition != null
+          ? (JSON.parse(row.end_condition) as EndCondition)
+          : { type: "none" };
+
+      let timeOfDay: TimeOfDay | undefined;
+      if (
+        row.time_of_day === "morning" ||
+        row.time_of_day === "afternoon" ||
+        row.time_of_day === "evening"
+      ) {
+        timeOfDay = row.time_of_day;
+      }
+
+      const habit: Habit = {
+        id: row.id,
+        name: row.name,
+        color: row.color,
+        icon: row.icon,
+        schedule,
+        endCondition,
+        timeOfDay,
+        time: row.time ?? undefined,
+      };
+
+      return habit;
+    });
   }
 
   async getById(id: HabitId): Promise<Habit | null> {
-    const row = db.getFirstSync<any>("SELECT * FROM habits WHERE id = ?", [id]);
+    const row = db.getFirstSync<{
+      id: string;
+      name: string;
+      color: string;
+      icon: string;
+      schedule_type: string;
+      schedule_days: string | null;
+      end_condition: string | null;
+      time_of_day: string | null;
+      time: string | null;
+    }>("SELECT * FROM habits WHERE id = ?", [id]);
 
     if (!row) return null;
 
-    return {
+    const days: number[] =
+      row.schedule_days != null ? JSON.parse(row.schedule_days) : [];
+
+    const schedule: HabitSchedule =
+      row.schedule_type === "weekly"
+        ? { type: "weekly", daysOfWeek: days }
+        : { type: "daily", daysOfWeek: days };
+
+    const endCondition: EndCondition =
+      row.end_condition != null
+        ? (JSON.parse(row.end_condition) as EndCondition)
+        : { type: "none" };
+
+    let timeOfDay: TimeOfDay | undefined;
+    if (
+      row.time_of_day === "morning" ||
+      row.time_of_day === "afternoon" ||
+      row.time_of_day === "evening"
+    ) {
+      timeOfDay = row.time_of_day;
+    }
+
+    const habit: Habit = {
       id: row.id,
       name: row.name,
       color: row.color,
       icon: row.icon,
-      schedule:
-        row.schedule_type === "daily"
-          ? { type: "daily" }
-          : {
-              type: "weekly",
-              daysOfWeek: row.schedule_days
-                ? JSON.parse(row.schedule_days)
-                : [],
-            },
-      timeOfDay: row.time_of_day,
-      time: row.time,
+      schedule,
+      endCondition,
+      timeOfDay,
+      time: row.time ?? undefined,
     };
+
+    return habit;
   }
 
   async create(habit: Habit): Promise<void> {
     db.runSync(
       `
       INSERT INTO habits
-      (id, name, color, icon, schedule_type, schedule_days, end_condition, time_of_day, time)
+        (id, name, color, icon, schedule_type, schedule_days, end_condition, time_of_day, time)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-
     `,
       [
         habit.id,
@@ -76,12 +125,10 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.color,
         habit.icon,
         habit.schedule.type,
-        habit.schedule.type === "weekly"
-          ? JSON.stringify(habit.schedule.daysOfWeek)
-          : null,
+        JSON.stringify(habit.schedule.daysOfWeek ?? []),
         JSON.stringify(habit.endCondition),
-        habit.timeOfDay,
-        habit.time,
+        habit.timeOfDay ?? null,
+        habit.time ?? null,
       ]
     );
   }
@@ -106,13 +153,11 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.color,
         habit.icon,
         habit.schedule.type,
-        habit.schedule.type === "weekly"
-          ? JSON.stringify(habit.schedule.daysOfWeek)
-          : null,
+        JSON.stringify(habit.schedule.daysOfWeek ?? []),
         JSON.stringify(habit.endCondition),
+        habit.timeOfDay ?? null,
+        habit.time ?? null,
         habit.id,
-        habit.timeOfDay,
-        habit.time,
       ]
     );
   }
