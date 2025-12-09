@@ -129,7 +129,7 @@ export default function TodayScreen() {
         <View style={styles.createWrapper}>
           <Pressable
             style={styles.createButton}
-            onPress={() => router.push("/habits/new")}
+            onPress={() => router.push("/habit-new")}
           >
             <Text style={styles.createText}>Crear nuevo hábito</Text>
           </Pressable>

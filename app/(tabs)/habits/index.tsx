@@ -6,12 +6,12 @@ import { router } from "expo-router";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 import {
-     ActivityIndicator,
-     Alert,
-     Pressable,
-     StyleSheet,
-     Text,
-     View,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 function formatSchedule(schedule: HabitSchedule): string {
@@ -84,7 +84,7 @@ export default function HabitsListScreen() {
         <Text style={styles.headerTitle}>Hábitos</Text>
 
         <Pressable
-          onPress={() => router.push("/habits/new")}
+          onPress={() => router.push("/habit-new")}
           style={styles.addButton}
           hitSlop={10}
         >
