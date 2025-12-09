@@ -11,6 +11,7 @@ export class CreateHabit {
     color: string;
     icon: string;
     schedule: Habit["schedule"];
+    endCondition: Habit["endCondition"];
     timeOfDay: Habit["timeOfDay"];
     time: string;
   }) {
@@ -20,6 +21,7 @@ export class CreateHabit {
       color: input.color,
       icon: input.icon,
       schedule: input.schedule,
+      endCondition: { type: "none" },
       timeOfDay: input.timeOfDay,
       time: input.time,
     };

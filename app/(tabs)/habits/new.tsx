@@ -1,6 +1,6 @@
 // app/habits/new.tsx
 import { container } from "@/core/di/container";
-import type { HabitSchedule } from "@/domain/entities/Habit";
+import type { EndCondition, HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { router } from "expo-router";
@@ -32,6 +32,9 @@ export default function NewHabit() {
   const [scheduleType, setScheduleType] =
     useState<HabitSchedule["type"]>("daily");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [endType, setEndType] = useState<"none" | "byDate">("none");
+  const [endDate, setEndDate] = useState<string | null>(null);
+
 
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
@@ -54,7 +57,10 @@ export default function NewHabit() {
     let schedule: HabitSchedule;
 
     if (scheduleType === "daily") {
-      schedule = { type: "daily" };
+      schedule = {
+        type: "daily",
+        daysOfWeek: selectedDays.length ? selectedDays : [0, 1, 2, 3, 4, 5, 6],
+      };
     } else {
       if (selectedDays.length === 0) {
         Alert.alert(
@@ -65,17 +71,26 @@ export default function NewHabit() {
       }
       schedule = {
         type: "weekly",
-        daysOfWeek: [...selectedDays].sort(),
+        daysOfWeek: selectedDays.sort(),
       };
     }
 
     const timeOfDay = getTimeOfDayFromHour(time);
+
+    let endCondition: EndCondition;
+
+    if (endType === "byDate" && endDate) {
+      endCondition = { type: "byDate", endDate };
+    } else {
+      endCondition = { type: "none" };
+    }
 
     await container.createHabit.execute({
       name: trimmed,
       color,
       icon,
       schedule,
+      endCondition,
       timeOfDay,
       time,
     });
@@ -213,6 +228,46 @@ export default function NewHabit() {
             );
           })}
         </View>
+      )}
+      <Text style={styles.label}>Terminar hábito</Text>
+
+      <View style={styles.segmentContainer}>
+        <Pressable
+          onPress={() => setEndType("none")}
+          style={[styles.segment, endType === "none" && styles.segmentActive]}
+        >
+          <Text
+            style={[
+              styles.segmentText,
+              endType === "none" && styles.segmentTextActive,
+            ]}
+          >
+            Sin fin
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setEndType("byDate")}
+          style={[styles.segment, endType === "byDate" && styles.segmentActive]}
+        >
+          <Text
+            style={[
+              styles.segmentText,
+              endType === "byDate" && styles.segmentTextActive,
+            ]}
+          >
+            Hasta fecha
+          </Text>
+        </Pressable>
+      </View>
+
+      {endType === "byDate" && (
+        <TextInput
+          placeholder="YYYY-MM-DD"
+          value={endDate ?? ""}
+          onChangeText={setEndDate}
+          style={styles.input}
+        />
       )}
 
       <Text style={styles.label}>Hora</Text>

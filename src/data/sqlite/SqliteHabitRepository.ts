@@ -30,6 +30,9 @@ export class SqliteHabitRepository implements HabitRepository {
                 ? JSON.parse(row.schedule_days)
                 : [],
             },
+      endCondition: row.end_condition
+        ? JSON.parse(row.end_condition)
+        : { type: "none" },
       timeOfDay: row.time_of_day as "morning" | "afternoon" | "evening",
       time: row.time,
     }));
@@ -62,8 +65,10 @@ export class SqliteHabitRepository implements HabitRepository {
   async create(habit: Habit): Promise<void> {
     db.runSync(
       `
-      INSERT INTO habits (id, name, color, icon, schedule_type, schedule_days, time_of_day, time)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO habits
+      (id, name, color, icon, schedule_type, schedule_days, end_condition, time_of_day, time)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+
     `,
       [
         habit.id,
@@ -74,6 +79,7 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.schedule.type === "weekly"
           ? JSON.stringify(habit.schedule.daysOfWeek)
           : null,
+        JSON.stringify(habit.endCondition),
         habit.timeOfDay,
         habit.time,
       ]
@@ -90,6 +96,7 @@ export class SqliteHabitRepository implements HabitRepository {
         icon = ?,
         schedule_type = ?,
         schedule_days = ?,
+        end_condition = ?,
         time_of_day = ?,
         time = ?
       WHERE id = ?
@@ -102,6 +109,7 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.schedule.type === "weekly"
           ? JSON.stringify(habit.schedule.daysOfWeek)
           : null,
+        JSON.stringify(habit.endCondition),
         habit.id,
         habit.timeOfDay,
         habit.time,

@@ -8,12 +8,13 @@ export function initDatabase() {
     PRAGMA journal_mode = WAL;
 
     CREATE TABLE IF NOT EXISTS habits (
-      id TEXT PRIMARY KEY NOT NULL,
+      id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       color TEXT NOT NULL,
       icon TEXT NOT NULL,
       schedule_type TEXT NOT NULL,
       schedule_days TEXT,
+      end_condition TEXT,
       time_of_day TEXT,
       time TEXT
     );
