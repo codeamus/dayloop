@@ -16,7 +16,25 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }} />
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* Grupo principal de tabs */}
+          <Stack.Screen
+            name="(tabs)"
+            options={{
+              headerShown: false,
+            }}
+          />
+
+          {/* MODAL: Crear hábito */}
+          <Stack.Screen
+            name="habit-new"
+            options={{
+              presentation: "modal",
+              animation: "slide_from_bottom",
+              headerShown: false,
+            }}
+          />
+        </Stack>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
