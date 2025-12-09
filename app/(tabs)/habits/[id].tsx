@@ -4,7 +4,7 @@ import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -42,7 +42,16 @@ export default function EditHabitScreen() {
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
 
-  const [time, setTime] = useState(""); 
+  const [time, setTime] = useState("");
+
+  useEffect(() => {
+    if (!id) return;
+
+    (async () => {
+      const res = await container.getHabitStreaks.execute(id.toString());
+      console.log("STREAKS", res);
+    })();
+  }, [id]);
 
   // Inicializar el state cuando ya tenemos el hábito
   useMemo(() => {
@@ -97,7 +106,7 @@ export default function EditHabitScreen() {
     }
 
     const timeOfDay = getTimeOfDayFromHour(time);
-    
+
     const updated: Habit = {
       ...habit,
       name: trimmed,

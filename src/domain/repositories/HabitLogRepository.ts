@@ -6,4 +6,6 @@ export interface HabitLogRepository {
   getLogsForDate(date: string): Promise<HabitLog[]>;
   getLogsForHabit(habitId: HabitId): Promise<HabitLog[]>;
   toggle(habitId: HabitId, date: string): Promise<void>;
+  getLogsForHabitSince(habitId: HabitId, fromDate: string): Promise<HabitLog[]>;
+  upsertLog(habitId: HabitId, date: string, done: boolean): Promise<void>;
 }

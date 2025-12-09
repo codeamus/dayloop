@@ -7,3 +7,11 @@ export interface HabitLog {
   date: string; // 'YYYY-MM-DD'
   done: boolean;
 }
+
+export type HabitStreak = {
+  habitId: string;
+  currentDailyStreak: number;
+  bestDailyStreak: number;
+  currentWeeklyStreak: number;
+  bestWeeklyStreak: number;
+};

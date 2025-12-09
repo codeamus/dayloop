@@ -19,12 +19,12 @@ export function initDatabase() {
     );
 
     CREATE TABLE IF NOT EXISTS habit_logs (
-      id TEXT PRIMARY KEY NOT NULL,
+      id TEXT PRIMARY KEY,
       habit_id TEXT NOT NULL,
       date TEXT NOT NULL,
       done INTEGER NOT NULL,
-
-      FOREIGN KEY (habit_id) REFERENCES habits(id)
+      completed_at TEXT,
+      UNIQUE(habit_id, date)
     );
   `);
 }
