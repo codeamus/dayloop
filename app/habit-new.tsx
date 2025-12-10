@@ -2,6 +2,9 @@
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
@@ -31,11 +34,17 @@ export default function HabitNewScreen() {
   const [color, setColor] = useState<string>(COLOR_OPTIONS[2]);
   const [emoji, setEmoji] = useState<string>("🔥");
   const [time, setTime] = useState<string>("08:00");
+  const [timeDate, setTimeDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(8, 0, 0, 0);
+    return d;
+  });
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const todayIndex = new Date().getDay(); // 0-6
   const [weeklyDays, setWeeklyDays] = useState<number[]>([todayIndex]);
 
-  const snapPoints = useMemo(() => ["60%"], []);
+  const snapPoints = useMemo(() => ["75%"], []);
 
   const handleSheetChange = useCallback(
     (index: number) => {
@@ -54,6 +63,37 @@ export default function HabitNewScreen() {
     bottomSheetRef.current?.close();
     router.back();
   }, [router]);
+
+  const handleTimeChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      // En Android el usuario puede cancelar
+      if (event.type === "dismissed") {
+        if (Platform.OS === "android") {
+          setShowTimePicker(false);
+        }
+        return;
+      }
+
+      const currentDate = selectedDate ?? timeDate;
+
+      const hours = currentDate.getHours();
+      const minutes = currentDate.getMinutes();
+
+      const hh = String(hours).padStart(2, "0");
+      const mm = String(minutes).padStart(2, "0");
+
+      setTime(`${hh}:${mm}`);
+      setTimeDate(currentDate);
+
+      // Solo cerramos automáticamente en Android al darle "OK"
+      if (Platform.OS === "android") {
+        setShowTimePicker(false);
+      }
+    },
+    [timeDate]
+  );
+
+
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
@@ -146,15 +186,32 @@ export default function HabitNewScreen() {
               <Text style={styles.label}>Hora del día</Text>
               <Pressable
                 style={styles.timeButton}
-                onPress={() => {
-                  Alert.alert(
-                    "Selector de hora pendiente",
-                    "Aquí puedes integrar un time picker nativo más adelante."
-                  );
-                }}
+                onPress={() => setShowTimePicker((prev) => !prev)}
               >
                 <Text style={styles.timeButtonText}>{time}</Text>
               </Pressable>
+
+              {showTimePicker && (
+                <View style={styles.timePickerContainer}>
+                  <DateTimePicker
+                    value={timeDate}
+                    mode="time"
+                    is24Hour
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={handleTimeChange}
+                    themeVariant="dark"
+                  />
+
+                  {Platform.OS === "ios" && (
+                    <Pressable
+                      style={styles.timeDoneButton}
+                      onPress={() => setShowTimePicker(false)}
+                    >
+                      <Text style={styles.timeDoneText}>Listo</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
             </View>
 
             {/* Color */}
@@ -258,7 +315,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 24,
+    paddingBottom: 32, // un poco más de aire abajo
     gap: 16,
   },
   title: {
@@ -348,4 +405,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
   },
   primaryText: { color: "#020617", fontSize: 14, fontWeight: "600" },
+  timePickerContainer: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#1f2937", // gray-800
+    backgroundColor: "#020617", // mismo fondo que el sheet
+  },
+  timeDoneButton: {
+    alignSelf: "flex-end",
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#4b5563",
+  },
+  timeDoneText: {
+    fontSize: 13,
+    color: "#e5e7eb",
+  },
 });
