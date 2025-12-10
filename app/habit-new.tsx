@@ -1,3 +1,6 @@
+// app/habit-new.tsx
+import WeekdaySelector from "@/presentation/components/WeekdaySelector";
+import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -21,17 +24,21 @@ export default function HabitNewScreen() {
   const router = useRouter();
   const bottomSheetRef = useRef<BottomSheet>(null);
 
+  const { create, isLoading } = useCreateHabit();
+
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("daily");
-  const [color, setColor] = useState<string>(COLOR_OPTIONS[2]); // naranja
+  const [color, setColor] = useState<string>(COLOR_OPTIONS[2]);
   const [emoji, setEmoji] = useState<string>("🔥");
-  const [time, setTime] = useState<string>("08:00"); // placeholder simple
+  const [time, setTime] = useState<string>("08:00");
+
+  const todayIndex = new Date().getDay(); // 0-6
+  const [weeklyDays, setWeeklyDays] = useState<number[]>([todayIndex]);
 
   const snapPoints = useMemo(() => ["60%"], []);
 
   const handleSheetChange = useCallback(
     (index: number) => {
-      // En @gorhom/bottom-sheet, index === -1 == cerrado
       if (index === -1) {
         router.back();
       }
@@ -48,38 +55,34 @@ export default function HabitNewScreen() {
     router.back();
   }, [router]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
       Alert.alert("Falta el nombre", "Escribe un nombre para el hábito.");
       return;
     }
 
-    // TODO: integrar con tu SqliteHabitRepository aquí.
-    // Ejemplo (ajusta al shape real de tu modelo):
-    //
-    // await habitRepo.create({
-    //   name: name.trim(),
-    //   type,
-    //   color,
-    //   emoji,
-    //   timeOfDay: time, // o { hour, minute }
-    //   ...otrosCampos
-    // });
-
-    console.log("Creando hábito:", {
+    const result = await create({
       name: name.trim(),
-      type,
       color,
-      emoji,
+      icon: emoji,
+      type,
       time,
+      weeklyDays: type === "weekly" ? weeklyDays : undefined,
     });
 
+    if (!result.ok) {
+      Alert.alert(
+        "Error al crear",
+        "No se pudo crear el hábito. Inténtalo de nuevo."
+      );
+      return;
+    }
+
     router.back();
-  }, [name, type, color, emoji, time, router]);
+  }, [name, color, emoji, type, time, weeklyDays, create, router]);
 
   return (
     <View style={styles.overlay}>
-      {/* Fondo oscuro clickeable para cerrar */}
       <Pressable style={styles.backdrop} onPress={handleBackgroundPress} />
 
       <KeyboardAvoidingView
@@ -110,7 +113,7 @@ export default function HabitNewScreen() {
               />
             </View>
 
-            {/* Tipo: diario / semanal */}
+            {/* Tipo */}
             <View style={styles.field}>
               <Text style={styles.label}>Tipo</Text>
               <View style={styles.row}>
@@ -127,17 +130,26 @@ export default function HabitNewScreen() {
               </View>
             </View>
 
-            {/* Hora del día (simple) */}
+            {/* Días de la semana (solo para semanal) */}
+            {type === "weekly" && (
+              <View style={styles.field}>
+                <Text style={styles.label}>Días de la semana</Text>
+                <WeekdaySelector
+                  selectedDays={weeklyDays}
+                  onChange={setWeeklyDays}
+                />
+              </View>
+            )}
+
+            {/* Hora */}
             <View style={styles.field}>
               <Text style={styles.label}>Hora del día</Text>
               <Pressable
                 style={styles.timeButton}
-                // Aquí más adelante puedes integrar un time picker nativo
                 onPress={() => {
-                  // Por ahora, solo de ejemplo.
                   Alert.alert(
-                    "Time picker",
-                    "Aquí puedes integrar un selector de hora nativo."
+                    "Selector de hora pendiente",
+                    "Aquí puedes integrar un time picker nativo más adelante."
                   );
                 }}
               >
@@ -183,12 +195,22 @@ export default function HabitNewScreen() {
             </View>
 
             {/* Botones */}
-            <View style={styles.footerRow}>
-              <Pressable style={styles.cancelButton} onPress={handleClose}>
+            <View className="footerRow" style={styles.footerRow}>
+              <Pressable
+                style={styles.cancelButton}
+                onPress={handleClose}
+                disabled={isLoading}
+              >
                 <Text style={styles.cancelText}>Cancelar</Text>
               </Pressable>
-              <Pressable style={styles.primaryButton} onPress={handleSubmit}>
-                <Text style={styles.primaryText}>Crear hábito</Text>
+              <Pressable
+                style={[styles.primaryButton, isLoading && { opacity: 0.5 }]}
+                onPress={handleSubmit}
+                disabled={isLoading}
+              >
+                <Text style={styles.primaryText}>
+                  {isLoading ? "Creando..." : "Crear hábito"}
+                </Text>
               </Pressable>
             </View>
           </BottomSheetView>
@@ -218,24 +240,19 @@ function ToggleChip({ label, active, onPress }: ToggleChipProps) {
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
+  flex: { flex: 1 },
+  overlay: { flex: 1, backgroundColor: "transparent" },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   sheetBackground: {
-    backgroundColor: "#020617", // slate-950
+    backgroundColor: "#020617",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
   handleIndicator: {
-    backgroundColor: "#4b5563", // gray-600
+    backgroundColor: "#4b5563",
     width: 40,
   },
   content: {
@@ -250,13 +267,8 @@ const styles = StyleSheet.create({
     color: "#f9fafb",
     marginBottom: 4,
   },
-  field: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    color: "#9ca3af",
-  },
+  field: { gap: 8 },
+  label: { fontSize: 14, color: "#9ca3af" },
   input: {
     borderRadius: 12,
     borderWidth: 1,
@@ -284,14 +296,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#22c55e",
     borderColor: "#22c55e",
   },
-  chipText: {
-    fontSize: 13,
-    color: "#e5e7eb",
-  },
-  chipTextActive: {
-    color: "#020617",
-    fontWeight: "600",
-  },
+  chipText: { fontSize: 13, color: "#e5e7eb" },
+  chipTextActive: { color: "#020617", fontWeight: "600" },
   timeButton: {
     borderRadius: 12,
     borderWidth: 1,
@@ -300,10 +306,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignSelf: "flex-start",
   },
-  timeButtonText: {
-    fontSize: 14,
-    color: "#f9fafb",
-  },
+  timeButtonText: { fontSize: 14, color: "#f9fafb" },
   colorDot: {
     width: 28,
     height: 28,
@@ -311,9 +314,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
-  colorDotActive: {
-    borderColor: "#ffffff",
-  },
+  colorDotActive: { borderColor: "#ffffff" },
   emojiChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -325,9 +326,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1f2937",
     borderColor: "#f97316",
   },
-  emoji: {
-    fontSize: 20,
-  },
+  emoji: { fontSize: 20 },
   footerRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -341,19 +340,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#4b5563",
   },
-  cancelText: {
-    color: "#e5e7eb",
-    fontSize: 14,
-  },
+  cancelText: { color: "#e5e7eb", fontSize: 14 },
   primaryButton: {
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: "#22c55e",
   },
-  primaryText: {
-    color: "#020617",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  primaryText: { color: "#020617", fontSize: 14, fontWeight: "600" },
 });
