@@ -1,12 +1,10 @@
-// app/habits/new.tsx
-import { container } from "@/core/di/container";
-import type { EndCondition, HabitSchedule } from "@/domain/entities/Habit";
-import { Screen } from "@/presentation/components/Screen";
-import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
-import { router } from "expo-router";
-import { useState } from "react";
+import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import { useRouter } from "expo-router";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -14,432 +12,348 @@ import {
   View,
 } from "react-native";
 
-const WEEK_DAYS = [
-  { label: "L", value: 0 },
-  { label: "M", value: 1 },
-  { label: "M", value: 2 },
-  { label: "J", value: 3 },
-  { label: "V", value: 4 },
-  { label: "S", value: 5 },
-  { label: "D", value: 6 },
-];
+const COLOR_OPTIONS = ["#22c55e", "#3b82f6", "#f97316", "#ec4899", "#a855f7"];
+const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
 
-const COLOR_PRESETS = ["#38BDF8", "#A855F7", "#F97316", "#22C55E", "#E11D48"];
-const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
+type HabitType = "daily" | "weekly";
 
-export default function NewHabit() {
+export default function HabitNewScreen() {
+  const router = useRouter();
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
   const [name, setName] = useState("");
-  const [scheduleType, setScheduleType] =
-    useState<HabitSchedule["type"]>("daily");
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [endType, setEndType] = useState<"none" | "byDate">("none");
-  const [endDate, setEndDate] = useState<string | null>(null);
+  const [type, setType] = useState<HabitType>("daily");
+  const [color, setColor] = useState<string>(COLOR_OPTIONS[2]); // naranja
+  const [emoji, setEmoji] = useState<string>("🔥");
+  const [time, setTime] = useState<string>("08:00"); // placeholder simple
 
+  const snapPoints = useMemo(() => ["60%"], []);
 
-  const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
-  const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
+  const handleSheetChange = useCallback(
+    (index: number) => {
+      // En @gorhom/bottom-sheet, index === -1 == cerrado
+      if (index === -1) {
+        router.back();
+      }
+    },
+    [router]
+  );
 
-  const [time, setTime] = useState("08:00"); // string "HH:mm"
+  const handleClose = useCallback(() => {
+    router.back();
+  }, [router]);
 
-  function toggleWeekDay(day: number) {
-    setSelectedDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
-  }
+  const handleBackgroundPress = useCallback(() => {
+    bottomSheetRef.current?.close();
+    router.back();
+  }, [router]);
 
-  async function save() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert("Nombre requerido", "Escribe un nombre para el hábito.");
+  const handleSubmit = useCallback(() => {
+    if (!name.trim()) {
+      Alert.alert("Falta el nombre", "Escribe un nombre para el hábito.");
       return;
     }
 
-    let schedule: HabitSchedule;
+    // TODO: integrar con tu SqliteHabitRepository aquí.
+    // Ejemplo (ajusta al shape real de tu modelo):
+    //
+    // await habitRepo.create({
+    //   name: name.trim(),
+    //   type,
+    //   color,
+    //   emoji,
+    //   timeOfDay: time, // o { hour, minute }
+    //   ...otrosCampos
+    // });
 
-    if (scheduleType === "daily") {
-      schedule = {
-        type: "daily",
-        daysOfWeek: selectedDays.length ? selectedDays : [0, 1, 2, 3, 4, 5, 6],
-      };
-    } else {
-      if (selectedDays.length === 0) {
-        Alert.alert(
-          "Selecciona días",
-          "Para un hábito semanal debes elegir al menos un día."
-        );
-        return;
-      }
-      schedule = {
-        type: "weekly",
-        daysOfWeek: selectedDays.sort(),
-      };
-    }
-
-    const timeOfDay = getTimeOfDayFromHour(time);
-
-    let endCondition: EndCondition;
-
-    if (endType === "byDate" && endDate) {
-      endCondition = { type: "byDate", endDate };
-    } else {
-      endCondition = { type: "none" };
-    }
-
-    await container.createHabit.execute({
-      name: trimmed,
+    console.log("Creando hábito:", {
+      name: name.trim(),
+      type,
       color,
-      icon,
-      schedule,
-      endCondition,
-      timeOfDay,
+      emoji,
       time,
     });
 
     router.back();
-  }
+  }, [name, type, color, emoji, time, router]);
 
   return (
-    <Screen>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={10}
+    <View style={styles.overlay}>
+      {/* Fondo oscuro clickeable para cerrar */}
+      <Pressable style={styles.backdrop} onPress={handleBackgroundPress} />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <BottomSheet
+          ref={bottomSheetRef}
+          index={0}
+          snapPoints={snapPoints}
+          enablePanDownToClose
+          onChange={handleSheetChange}
+          backgroundStyle={styles.sheetBackground}
+          handleIndicatorStyle={styles.handleIndicator}
         >
-          <Text style={styles.backIcon}>‹</Text>
-          <Text style={styles.backText}>Volver</Text>
-        </Pressable>
+          <BottomSheetView style={styles.content}>
+            <Text style={styles.title}>Crear nuevo hábito</Text>
 
-        <Text style={styles.headerTitle}>Nuevo hábito</Text>
-        <View style={{ width: 70 }} />
-      </View>
+            {/* Nombre */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Nombre</Text>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Ej: Tomar agua, Leer 10 minutos..."
+                placeholderTextColor="#9ca3af"
+                style={styles.input}
+              />
+            </View>
 
-      <Text style={styles.label}>Nombre</Text>
-      <TextInput
-        placeholder="Ej: Leer 10 minutos"
-        placeholderTextColor="#64748B"
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-      />
+            {/* Tipo: diario / semanal */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Tipo</Text>
+              <View style={styles.row}>
+                <ToggleChip
+                  label="Diario"
+                  active={type === "daily"}
+                  onPress={() => setType("daily")}
+                />
+                <ToggleChip
+                  label="Semanal"
+                  active={type === "weekly"}
+                  onPress={() => setType("weekly")}
+                />
+              </View>
+            </View>
 
-      {/* Color */}
-      <Text style={styles.label}>Color</Text>
-      <View style={styles.colorsRow}>
-        {COLOR_PRESETS.map((c) => {
-          const active = c === color;
-          return (
-            <Pressable
-              key={c}
-              onPress={() => setColor(c)}
-              style={[
-                styles.colorDotWrapper,
-                active && styles.colorDotWrapperActive,
-              ]}
-            >
-              <View style={[styles.colorDot, { backgroundColor: c }]} />
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Icono */}
-      <Text style={styles.label}>Icono</Text>
-      <View style={styles.iconsRow}>
-        {ICON_PRESETS.map((i) => {
-          const active = i === icon;
-          return (
-            <Pressable
-              key={i}
-              onPress={() => setIcon(i)}
-              style={[styles.iconChip, active && styles.iconChipActive]}
-            >
-              <Text
-                style={[
-                  styles.iconChipText,
-                  active && styles.iconChipTextActive,
-                ]}
-              >
-                {i}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <Text style={styles.label}>Frecuencia</Text>
-
-      <View style={styles.segmentContainer}>
-        <Pressable
-          onPress={() => setScheduleType("daily")}
-          style={[
-            styles.segment,
-            scheduleType === "daily" && styles.segmentActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              scheduleType === "daily" && styles.segmentTextActive,
-            ]}
-          >
-            Diario
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setScheduleType("weekly")}
-          style={[
-            styles.segment,
-            scheduleType === "weekly" && styles.segmentActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              scheduleType === "weekly" && styles.segmentTextActive,
-            ]}
-          >
-            Semanal
-          </Text>
-        </Pressable>
-      </View>
-
-      {scheduleType === "weekly" && (
-        <View style={styles.weekDaysContainer}>
-          {WEEK_DAYS.map((day) => {
-            const active = selectedDays.includes(day.value);
-            return (
+            {/* Hora del día (simple) */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Hora del día</Text>
               <Pressable
-                key={day.value}
-                onPress={() => toggleWeekDay(day.value)}
-                style={[styles.dayChip, active && styles.dayChipActive]}
+                style={styles.timeButton}
+                // Aquí más adelante puedes integrar un time picker nativo
+                onPress={() => {
+                  // Por ahora, solo de ejemplo.
+                  Alert.alert(
+                    "Time picker",
+                    "Aquí puedes integrar un selector de hora nativo."
+                  );
+                }}
               >
-                <Text
-                  style={[
-                    styles.dayChipText,
-                    active && styles.dayChipTextActive,
-                  ]}
-                >
-                  {day.label}
-                </Text>
+                <Text style={styles.timeButtonText}>{time}</Text>
               </Pressable>
-            );
-          })}
-        </View>
-      )}
-      <Text style={styles.label}>Terminar hábito</Text>
+            </View>
 
-      <View style={styles.segmentContainer}>
-        <Pressable
-          onPress={() => setEndType("none")}
-          style={[styles.segment, endType === "none" && styles.segmentActive]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              endType === "none" && styles.segmentTextActive,
-            ]}
-          >
-            Sin fin
-          </Text>
-        </Pressable>
+            {/* Color */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Color</Text>
+              <View style={styles.row}>
+                {COLOR_OPTIONS.map((c) => (
+                  <Pressable
+                    key={c}
+                    onPress={() => setColor(c)}
+                    style={[
+                      styles.colorDot,
+                      { backgroundColor: c },
+                      color === c && styles.colorDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            </View>
 
-        <Pressable
-          onPress={() => setEndType("byDate")}
-          style={[styles.segment, endType === "byDate" && styles.segmentActive]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              endType === "byDate" && styles.segmentTextActive,
-            ]}
-          >
-            Hasta fecha
-          </Text>
-        </Pressable>
-      </View>
+            {/* Emoji */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Emoji</Text>
+              <View style={styles.row}>
+                {EMOJI_OPTIONS.map((e) => (
+                  <Pressable
+                    key={e}
+                    onPress={() => setEmoji(e)}
+                    style={[
+                      styles.emojiChip,
+                      emoji === e && styles.emojiChipActive,
+                    ]}
+                  >
+                    <Text style={styles.emoji}>{e}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-      {endType === "byDate" && (
-        <TextInput
-          placeholder="YYYY-MM-DD"
-          value={endDate ?? ""}
-          onChangeText={setEndDate}
-          style={styles.input}
-        />
-      )}
+            {/* Botones */}
+            <View style={styles.footerRow}>
+              <Pressable style={styles.cancelButton} onPress={handleClose}>
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable style={styles.primaryButton} onPress={handleSubmit}>
+                <Text style={styles.primaryText}>Crear hábito</Text>
+              </Pressable>
+            </View>
+          </BottomSheetView>
+        </BottomSheet>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
 
-      <Text style={styles.label}>Hora</Text>
-      <TextInput
-        placeholder="Ej: 08:00"
-        placeholderTextColor="#64748B"
-        style={styles.input}
-        value={time}
-        onChangeText={setTime}
-      />
+type ToggleChipProps = {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+};
 
-      <Pressable onPress={save} style={styles.btn}>
-        <Text style={styles.btnText}>Guardar</Text>
-      </Pressable>
-    </Screen>
+function ToggleChip({ label, active, onPress }: ToggleChipProps) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive]}
+    >
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingTop: 16,
-    marginBottom: 16,
-    justifyContent: "space-between",
+  flex: {
+    flex: 1,
   },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
+  overlay: {
+    flex: 1,
+    backgroundColor: "transparent",
   },
-  backIcon: {
-    color: "#E5E7EB",
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  sheetBackground: {
+    backgroundColor: "#020617", // slate-950
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  handleIndicator: {
+    backgroundColor: "#4b5563", // gray-600
+    width: 40,
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 24,
+    gap: 16,
+  },
+  title: {
     fontSize: 20,
-    marginRight: 2,
+    fontWeight: "700",
+    color: "#f9fafb",
+    marginBottom: 4,
   },
-  backText: {
-    color: "#E5E7EB",
-    fontSize: 14,
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-
-  label: {
-    color: "#CBD5F5",
-    fontSize: 14,
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: "#1E293B",
-    color: "#fff",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-
-  colorsRow: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-  colorDotWrapper: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  colorDotWrapperActive: {
-    borderColor: "#38BDF8",
-  },
-  colorDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-  },
-
-  iconsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  field: {
     gap: 8,
   },
-  iconChip: {
+  label: {
+    fontSize: 14,
+    color: "#9ca3af",
+  },
+  input: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#374151",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#f9fafb",
+    fontSize: 14,
+    backgroundColor: "#020617",
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#4b5563",
+  },
+  chipActive: {
+    backgroundColor: "#22c55e",
+    borderColor: "#22c55e",
+  },
+  chipText: {
+    fontSize: 13,
+    color: "#e5e7eb",
+  },
+  chipTextActive: {
+    color: "#020617",
+    fontWeight: "600",
+  },
+  timeButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#374151",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignSelf: "flex-start",
+  },
+  timeButtonText: {
+    fontSize: 14,
+    color: "#f9fafb",
+  },
+  colorDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  colorDotActive: {
+    borderColor: "#ffffff",
+  },
+  emojiChip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: "#4b5563",
   },
-  iconChipActive: {
-    backgroundColor: "#38BDF8",
-    borderColor: "#38BDF8",
+  emojiChipActive: {
+    backgroundColor: "#1f2937",
+    borderColor: "#f97316",
   },
-  iconChipText: {
-    fontSize: 16,
+  emoji: {
+    fontSize: 20,
   },
-  iconChipTextActive: {
-    color: "#0F172A",
-    fontWeight: "600",
-  },
-
-  segmentContainer: {
+  footerRow: {
     flexDirection: "row",
-    backgroundColor: "#020617",
-    borderRadius: 999,
-    padding: 3,
-    gap: 4,
-    marginTop: 4,
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 8,
   },
-  segment: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#020617",
-  },
-  segmentActive: {
-    backgroundColor: "#38BDF8",
-  },
-  segmentText: {
-    color: "#64748B",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  segmentTextActive: {
-    color: "#0F172A",
-    fontWeight: "700",
-  },
-  weekDaysContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  dayChip: {
-    width: 36,
-    height: 36,
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#334155",
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: "#4b5563",
   },
-  dayChipActive: {
-    backgroundColor: "#38BDF8",
-    borderColor: "#38BDF8",
+  cancelText: {
+    color: "#e5e7eb",
+    fontSize: 14,
   },
-  dayChipText: {
-    color: "#94A3B8",
-    fontWeight: "500",
+  primaryButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "#22c55e",
   },
-  dayChipTextActive: {
-    color: "#0F172A",
-    fontWeight: "700",
-  },
-  btn: {
-    backgroundColor: "#38BDF8",
-    paddingVertical: 14,
-    borderRadius: 10,
-    marginTop: 24,
-  },
-  btnText: {
-    textAlign: "center",
-    color: "#0F172A",
-    fontWeight: "700",
-    fontSize: 16,
+  primaryText: {
+    color: "#020617",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

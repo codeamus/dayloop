@@ -29,9 +29,10 @@ export default function RootLayout() {
           <Stack.Screen
             name="habit-new"
             options={{
-              presentation: "modal",
-              animation: "slide_from_bottom",
-              headerShown: false,
+              presentation: "transparentModal",
+              contentStyle: {
+                backgroundColor: "transparent", // clave
+              },
             }}
           />
         </Stack>
