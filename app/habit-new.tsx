@@ -29,6 +29,19 @@ export default function HabitNewScreen() {
 
   const { create, isLoading } = useCreateHabit();
 
+  const REMINDER_OPTIONS = [
+    { label: "Sin recordatorio", value: null },
+    { label: "A la hora", value: 0 },
+    { label: "5 min antes", value: 5 },
+    { label: "10 min antes", value: 10 },
+    { label: "30 min antes", value: 30 },
+    { label: "1 hora antes", value: 60 },
+  ];
+
+  const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState<
+    number | null
+  >(0);
+
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("daily");
   const [color, setColor] = useState<string>(COLOR_OPTIONS[2]);
@@ -108,6 +121,7 @@ export default function HabitNewScreen() {
       type,
       time,
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
+      reminderOffsetMinutes,
     });
 
     if (!result.ok) {
@@ -119,7 +133,17 @@ export default function HabitNewScreen() {
     }
 
     router.back();
-  }, [name, color, emoji, type, time, weeklyDays, create, router]);
+  }, [
+    name,
+    color,
+    emoji,
+    type,
+    time,
+    weeklyDays,
+    create,
+    router,
+    reminderOffsetMinutes,
+  ]);
 
   return (
     <View style={styles.overlay}>
@@ -212,6 +236,32 @@ export default function HabitNewScreen() {
                   )}
                 </View>
               )}
+            </View>
+
+            {/* Recordatorio */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Recordatorio</Text>
+              <View style={styles.row}>
+                {REMINDER_OPTIONS.map((opt) => {
+                  const active = reminderOffsetMinutes === opt.value;
+                  return (
+                    <Pressable
+                      key={String(opt.value)}
+                      onPress={() => setReminderOffsetMinutes(opt.value)}
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          active && styles.chipTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             {/* Color */}

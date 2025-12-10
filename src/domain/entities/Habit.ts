@@ -30,4 +30,5 @@ export interface Habit {
 
   timeOfDay?: TimeOfDay; // OPCIONAL
   time?: string; // OPCIONAL ("HH:mm")
+  reminderOffsetMinutes?: number; // ej: 0, 5, 10, 15, 30, 60
 }

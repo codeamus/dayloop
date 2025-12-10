@@ -16,7 +16,8 @@ export function initDatabase() {
       schedule_days TEXT,
       end_condition TEXT,
       time_of_day TEXT,
-      time TEXT
+      time TEXT,
+      reminder_offset_minutes INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS habit_logs (

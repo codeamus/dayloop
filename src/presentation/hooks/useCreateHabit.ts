@@ -1,10 +1,11 @@
 // src/presentation/hooks/useCreateHabit.ts
+import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import { SqliteHabitRepository } from "@/data/sqlite/SqliteHabitRepository";
 import type {
-     EndCondition,
-     Habit,
-     HabitSchedule,
-     TimeOfDay,
+  EndCondition,
+  Habit,
+  HabitSchedule,
+  TimeOfDay,
 } from "@/domain/entities/Habit";
 import { CreateHabit } from "@/domain/usecases/CreateHabit";
 import { useCallback, useState } from "react";
@@ -18,7 +19,8 @@ export type CreateHabitFormInput = {
   icon: string; // emoji
   type: "daily" | "weekly";
   time: string; // "HH:mm"
-  weeklyDays?: number[]; // 0–6 (Domingo–Sábado, como Date.getDay)
+  weeklyDays?: number[]; // 0–6
+  reminderOffsetMinutes?: number;
 };
 
 function inferTimeOfDayFromTime(time: string): TimeOfDay {
@@ -46,6 +48,13 @@ function buildSchedule(
   return { type: "weekly", daysOfWeek: days };
 }
 
+function parseTimeToHourMinute(time: string): { hour: number; minute: number } {
+  const [hStr, mStr] = time.split(":");
+  const hour = Math.max(0, Math.min(23, Number(hStr) || 0));
+  const minute = Math.max(0, Math.min(59, Number(mStr) || 0));
+  return { hour, minute };
+}
+
 export function useCreateHabit() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -70,7 +79,30 @@ export function useCreateHabit() {
         endCondition,
         timeOfDay,
         time: input.time,
+        reminderOffsetMinutes:
+          input.reminderOffsetMinutes != null
+            ? input.reminderOffsetMinutes
+            : undefined,
       });
+
+      // Después de crear el hábito
+      try {
+        if (input.reminderOffsetMinutes != null) {
+          const { hour, minute } = parseTimeToHourMinute(input.time);
+          await scheduleHabitReminder({
+            habitId: habit.id,
+            habitName: habit.name,
+            hour,
+            minute,
+            offsetMinutes: input.reminderOffsetMinutes,
+          });
+        }
+      } catch (notifError) {
+        console.warn(
+          "[useCreateHabit] No se pudo programar recordatorio del hábito",
+          notifError
+        );
+      }
 
       setIsLoading(false);
       return { ok: true as const, habit };

@@ -1,4 +1,5 @@
 // src/core/notifications/notifications.ts
+import { HabitId } from "@/domain/entities/Habit";
 import Constants from "expo-constants";
 import type * as NotificationsType from "expo-notifications";
 import { Platform } from "react-native";
@@ -41,11 +42,15 @@ export function initNotificationsConfig() {
   const Notifs = assertNotifications();
 
   Notifs.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    handleNotification: async () => {
+      // Este handler SOLO corre cuando la app está en foreground.
+      // No mostramos nada en ese caso (se verá solo cuando esté en background).
+      return {
+        shouldShowAlert: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    },
   });
 }
 
@@ -115,5 +120,62 @@ export async function scheduleDailyReminder(
     `[notifications] Programado recordatorio diario a las ${hour}:${String(
       minute
     ).padStart(2, "0")}`
+  );
+}
+
+export async function scheduleHabitReminder(options: {
+  habitId: HabitId;
+  habitName: string;
+  hour: number; // hora del hábito
+  minute: number; // minuto del hábito
+  offsetMinutes?: number; // cuánto antes, ej 0, 5, 10,...
+}): Promise<void> {
+  if (isExpoGoAndroid) {
+    console.log(
+      "[notifications] Saltando scheduleHabitReminder en Expo Go Android."
+    );
+    return;
+  }
+
+  const Notifs = assertNotifications();
+
+  const hasPermission = await requestNotificationPermission();
+  if (!hasPermission) {
+    console.warn("Notificaciones no permitidas por el usuario");
+    return;
+  }
+
+  const offset = options.offsetMinutes ?? 0;
+  const total = options.hour * 60 + options.minute - offset;
+  const minutesInDay = 24 * 60;
+
+  // Normalizar (si el offset pasa al día anterior)
+  const normalized = ((total % minutesInDay) + minutesInDay) % minutesInDay;
+  const reminderHour = Math.floor(normalized / 60);
+  const reminderMinute = normalized % 60;
+
+  const trigger: NotificationsType.DailyTriggerInput = {
+    hour: reminderHour,
+    minute: reminderMinute,
+    repeats: true,
+  };
+
+  await Notifs.scheduleNotificationAsync({
+    identifier: `habit-${options.habitId}`,
+    content: {
+      title: "DAYLOOP",
+      body: `¡${options.habitName}! Es momento de cumplir tu hábito 💪`,
+      sound: Platform.OS === "ios" ? "default" : undefined,
+    },
+    trigger,
+  });
+
+  console.log(
+    `[notifications] Recordatorio para "${options.habitName}" a las ${String(
+      reminderHour
+    ).padStart(2, "0")}:${String(reminderMinute).padStart(
+      2,
+      "0"
+    )} (offset ${offset} min)`
   );
 }

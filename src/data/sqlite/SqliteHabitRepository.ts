@@ -21,6 +21,7 @@ export class SqliteHabitRepository implements HabitRepository {
       end_condition: string | null; // JSON o null
       time_of_day: string | null; // "morning" | "afternoon" | "evening" | null
       time: string | null; // "HH:mm" | null
+      reminder_offset_minutes: number | null;
     }>("SELECT * FROM habits");
 
     return rows.map((row) => {
@@ -55,6 +56,10 @@ export class SqliteHabitRepository implements HabitRepository {
         endCondition,
         timeOfDay,
         time: row.time ?? undefined,
+        reminderOffsetMinutes:
+          row.reminder_offset_minutes != null
+            ? Number(row.reminder_offset_minutes)
+            : undefined,
       };
 
       return habit;
@@ -72,6 +77,7 @@ export class SqliteHabitRepository implements HabitRepository {
       end_condition: string | null;
       time_of_day: string | null;
       time: string | null;
+      reminder_offset_minutes: number | null;
     }>("SELECT * FROM habits WHERE id = ?", [id]);
 
     if (!row) return null;
@@ -107,6 +113,10 @@ export class SqliteHabitRepository implements HabitRepository {
       endCondition,
       timeOfDay,
       time: row.time ?? undefined,
+      reminderOffsetMinutes:
+        row.reminder_offset_minutes != null
+          ? Number(row.reminder_offset_minutes)
+          : undefined,
     };
 
     return habit;
@@ -116,8 +126,8 @@ export class SqliteHabitRepository implements HabitRepository {
     db.runSync(
       `
       INSERT INTO habits
-        (id, name, color, icon, schedule_type, schedule_days, end_condition, time_of_day, time)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, color, icon, schedule_type, schedule_days, end_condition, time_of_day, time, reminder_offset_minutes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
       [
         habit.id,
@@ -129,6 +139,7 @@ export class SqliteHabitRepository implements HabitRepository {
         JSON.stringify(habit.endCondition),
         habit.timeOfDay ?? null,
         habit.time ?? null,
+        habit.reminderOffsetMinutes ?? null
       ]
     );
   }

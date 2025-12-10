@@ -14,6 +14,7 @@ export class CreateHabit {
     endCondition: Habit["endCondition"];
     timeOfDay: Habit["timeOfDay"];
     time: string;
+    reminderOffsetMinutes?: number;
   }) {
     const habit: Habit = {
       id: randomUUID(),
@@ -24,6 +25,7 @@ export class CreateHabit {
       endCondition: { type: "none" },
       timeOfDay: input.timeOfDay,
       time: input.time,
+      reminderOffsetMinutes: input.reminderOffsetMinutes,
     };
 
     await this.habitRepository.create(habit);
