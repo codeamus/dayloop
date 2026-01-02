@@ -1,6 +1,4 @@
 // app/habit-new.tsx
-import WeekdaySelector from "@/presentation/components/WeekdaySelector";
-import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -18,6 +16,11 @@ import {
   View,
 } from "react-native";
 
+import WeekdaySelector from "@/presentation/components/WeekdaySelector";
+import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
+
+import { scheduleHabitReminder } from "@/core/notifications/notifications";
+
 const COLOR_OPTIONS = ["#22c55e", "#3b82f6", "#f97316", "#ec4899", "#a855f7"];
 const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
 
@@ -30,7 +33,7 @@ export default function HabitNewScreen() {
   const { create, isLoading } = useCreateHabit();
 
   const REMINDER_OPTIONS = [
-    { label: "Sin recordatorio", value: null },
+    { label: "Sin recordatorio", value: null as null | number },
     { label: "A la hora", value: 0 },
     { label: "5 min antes", value: 5 },
     { label: "10 min antes", value: 10 },
@@ -47,11 +50,13 @@ export default function HabitNewScreen() {
   const [color, setColor] = useState<string>(COLOR_OPTIONS[2]);
   const [emoji, setEmoji] = useState<string>("🔥");
   const [time, setTime] = useState<string>("08:00");
+
   const [timeDate, setTimeDate] = useState<Date>(() => {
     const d = new Date();
     d.setHours(8, 0, 0, 0);
     return d;
   });
+
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   const todayIndex = new Date().getDay(); // 0-6
@@ -61,9 +66,7 @@ export default function HabitNewScreen() {
 
   const handleSheetChange = useCallback(
     (index: number) => {
-      if (index === -1) {
-        router.back();
-      }
+      if (index === -1) router.back();
     },
     [router]
   );
@@ -79,11 +82,8 @@ export default function HabitNewScreen() {
 
   const handleTimeChange = useCallback(
     (event: DateTimePickerEvent, selectedDate?: Date) => {
-      // En Android el usuario puede cancelar
       if (event.type === "dismissed") {
-        if (Platform.OS === "android") {
-          setShowTimePicker(false);
-        }
+        if (Platform.OS === "android") setShowTimePicker(false);
         return;
       }
 
@@ -98,15 +98,10 @@ export default function HabitNewScreen() {
       setTime(`${hh}:${mm}`);
       setTimeDate(currentDate);
 
-      // Solo cerramos automáticamente en Android al darle "OK"
-      if (Platform.OS === "android") {
-        setShowTimePicker(false);
-      }
+      if (Platform.OS === "android") setShowTimePicker(false);
     },
     [timeDate]
   );
-
-
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
@@ -114,7 +109,7 @@ export default function HabitNewScreen() {
       return;
     }
 
-    const result = await create({
+    const payload = {
       name: name.trim(),
       color,
       icon: emoji,
@@ -122,7 +117,9 @@ export default function HabitNewScreen() {
       time,
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
       reminderOffsetMinutes,
-    });
+    };
+
+    const result = await create(payload);
 
     if (!result.ok) {
       Alert.alert(
@@ -130,6 +127,25 @@ export default function HabitNewScreen() {
         "No se pudo crear el hábito. Inténtalo de nuevo."
       );
       return;
+    }
+
+    // Programar recordatorio real del hábito (si NO es "Sin recordatorio")
+    // Ajusta cómo obtienes el habitId según el retorno real de tu hook
+    const habitId: string | null =
+      (result as any)?.habit?.id ?? (result as any)?.id ?? null;
+
+    if (habitId && reminderOffsetMinutes !== null) {
+      const [hh, mm] = time.split(":").map((x) => Number(x));
+
+      if (Number.isFinite(hh) && Number.isFinite(mm)) {
+        await scheduleHabitReminder({
+          habitId: habitId as any,
+          habitName: name.trim(),
+          hour: hh,
+          minute: mm,
+          offsetMinutes: reminderOffsetMinutes ?? 0,
+        });
+      }
     }
 
     router.back();
@@ -140,9 +156,9 @@ export default function HabitNewScreen() {
     type,
     time,
     weeklyDays,
+    reminderOffsetMinutes,
     create,
     router,
-    reminderOffsetMinutes,
   ]);
 
   return (
@@ -310,6 +326,7 @@ export default function HabitNewScreen() {
               >
                 <Text style={styles.cancelText}>Cancelar</Text>
               </Pressable>
+
               <Pressable
                 style={[styles.primaryButton, isLoading && { opacity: 0.5 }]}
                 onPress={handleSubmit}
@@ -365,7 +382,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,
-    paddingBottom: 32, // un poco más de aire abajo
+    paddingBottom: 32,
     gap: 16,
   },
   title: {
@@ -461,8 +478,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#1f2937", // gray-800
-    backgroundColor: "#020617", // mismo fondo que el sheet
+    borderColor: "#1f2937",
+    backgroundColor: "#020617",
   },
   timeDoneButton: {
     alignSelf: "flex-end",

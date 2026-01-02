@@ -4,19 +4,17 @@ import Constants from "expo-constants";
 import type * as NotificationsType from "expo-notifications";
 import { Platform } from "react-native";
 
-// Detectar Expo Go en Android (no soporta bien expo-notifications)
+// Expo Go Android: limitaciones
 const isExpoGoAndroid =
   Platform.OS === "android" && Constants.appOwnership === "expo";
 
-// Instancia real (solo se llena fuera de Expo Go Android)
+// Instancia real
 let Notifications: typeof NotificationsType | null = null;
 
 if (!isExpoGoAndroid) {
-   
   Notifications = require("expo-notifications");
 }
 
-// Helper interno para evitar repetir null-check
 function assertNotifications() {
   if (!Notifications) {
     throw new Error(
@@ -26,88 +24,79 @@ function assertNotifications() {
   return Notifications;
 }
 
-// ==========================
-// API pública
-// ==========================
+// IDs estables
+const DAILY_ID = "daily-summary";
 
-// Config global: cómo se muestran las notis cuando la app está abierta
+// ==========================
+// Config global
+// ==========================
 export function initNotificationsConfig() {
-  if (isExpoGoAndroid) {
-    console.log(
-      "[notifications] Saltando configuración en Expo Go Android (no soporta push remotas)"
-    );
-    return;
-  }
+  if (isExpoGoAndroid) return;
 
   const Notifs = assertNotifications();
 
   Notifs.setNotificationHandler({
-    handleNotification: async () => {
-      // Este handler SOLO corre cuando la app está en foreground.
-      // No mostramos nada en ese caso (se verá solo cuando esté en background).
-      return {
-        shouldShowAlert: false,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      };
-    },
+    handleNotification: async () => ({
+      // foreground only
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+
+      // SDK reciente
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
   });
 }
 
+// ==========================
+// Permisos
+// ==========================
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (isExpoGoAndroid) {
-    console.log(
-      "[notifications] Saltando requestPermission en Expo Go Android."
-    );
-    return false;
-  }
+  if (isExpoGoAndroid) return false;
 
   const Notifs = assertNotifications();
 
-  const { status: existingStatus } = await Notifs.getPermissionsAsync();
-  if (existingStatus === "granted") return true;
+  const perms = await Notifs.getPermissionsAsync();
+  if (perms.status === "granted") return true;
 
-  const { status } = await Notifs.requestPermissionsAsync();
-  return status === "granted";
+  const req = await Notifs.requestPermissionsAsync();
+  return req.status === "granted";
 }
 
-// Cancela todas las notis programadas (para evitar duplicados)
-export async function cancelAllScheduledNotifications() {
+// ==========================
+// Cancelación (por ID)
+// ==========================
+export async function cancelScheduledNotification(id: string) {
   if (isExpoGoAndroid) return;
   const Notifs = assertNotifications();
-  await Notifs.cancelAllScheduledNotificationsAsync();
+  try {
+    await Notifs.cancelScheduledNotificationAsync(id);
+  } catch {
+    // si no existía, da lo mismo
+  }
 }
 
-// Programa un recordatorio diario a la hora/minuto que le pases
-export async function scheduleDailyReminder(
-  hour: number,
-  minute: number
-): Promise<void> {
-  if (isExpoGoAndroid) {
-    console.log(
-      "[notifications] No se programan recordatorios en Expo Go Android."
-    );
-    return;
-  }
+// ==========================
+// Recordatorio diario (resumen)
+// ==========================
+export async function scheduleDailyReminder(hour: number, minute: number) {
+  if (isExpoGoAndroid) return;
 
   const Notifs = assertNotifications();
+  const ok = await requestNotificationPermission();
+  if (!ok) return;
 
-  const hasPermission = await requestNotificationPermission();
-  if (!hasPermission) {
-    console.warn("Notificaciones no permitidas por el usuario");
-    return;
-  }
+  await cancelScheduledNotification(DAILY_ID);
 
-  // Evitar acumular notis duplicadas
-  await cancelAllScheduledNotifications();
-
-  const trigger: NotificationsType.DailyTriggerInput = {
+  const trigger: NotificationsType.NotificationTriggerInput = {
+    type: Notifs.SchedulableTriggerInputTypes.CALENDAR,
     hour,
     minute,
     repeats: true,
   };
 
   await Notifs.scheduleNotificationAsync({
+    identifier: DAILY_ID,
     content: {
       title: "DAYLOOP",
       body: "No olvides completar tus hábitos de hoy 💡",
@@ -115,53 +104,46 @@ export async function scheduleDailyReminder(
     },
     trigger,
   });
-
-  console.log(
-    `[notifications] Programado recordatorio diario a las ${hour}:${String(
-      minute
-    ).padStart(2, "0")}`
-  );
 }
 
+// ==========================
+// Recordatorio por hábito (diario)
+// ==========================
 export async function scheduleHabitReminder(options: {
   habitId: HabitId;
   habitName: string;
-  hour: number; // hora del hábito
-  minute: number; // minuto del hábito
-  offsetMinutes?: number; // cuánto antes, ej 0, 5, 10,...
-}): Promise<void> {
-  if (isExpoGoAndroid) {
-    console.log(
-      "[notifications] Saltando scheduleHabitReminder en Expo Go Android."
-    );
-    return;
-  }
+  hour: number;
+  minute: number;
+  offsetMinutes?: number;
+}) {
+  if (isExpoGoAndroid) return;
 
   const Notifs = assertNotifications();
-
-  const hasPermission = await requestNotificationPermission();
-  if (!hasPermission) {
-    console.warn("Notificaciones no permitidas por el usuario");
-    return;
-  }
+  const ok = await requestNotificationPermission();
+  if (!ok) return;
 
   const offset = options.offsetMinutes ?? 0;
   const total = options.hour * 60 + options.minute - offset;
   const minutesInDay = 24 * 60;
 
-  // Normalizar (si el offset pasa al día anterior)
   const normalized = ((total % minutesInDay) + minutesInDay) % minutesInDay;
   const reminderHour = Math.floor(normalized / 60);
   const reminderMinute = normalized % 60;
 
-  const trigger: NotificationsType.DailyTriggerInput = {
+  const id = `habit-${options.habitId}`;
+
+  // Evitar duplicados solo para este hábito
+  await cancelScheduledNotification(id);
+
+  const trigger: NotificationsType.NotificationTriggerInput = {
+    type: Notifs.SchedulableTriggerInputTypes.CALENDAR,
     hour: reminderHour,
     minute: reminderMinute,
     repeats: true,
   };
 
   await Notifs.scheduleNotificationAsync({
-    identifier: `habit-${options.habitId}`,
+    identifier: id,
     content: {
       title: "DAYLOOP",
       body: `¡${options.habitName}! Es momento de cumplir tu hábito 💪`,
@@ -169,13 +151,34 @@ export async function scheduleHabitReminder(options: {
     },
     trigger,
   });
+}
 
-  console.log(
-    `[notifications] Recordatorio para "${options.habitName}" a las ${String(
-      reminderHour
-    ).padStart(2, "0")}:${String(reminderMinute).padStart(
-      2,
-      "0"
-    )} (offset ${offset} min)`
-  );
+// ==========================
+// Debug (opcional): notificación en X segundos
+// Deja esto aquí por si alguna vez necesitas testear, pero NO lo llames en producción.
+// ==========================
+export async function scheduleDebugNotificationIn(seconds: number) {
+  if (isExpoGoAndroid) return;
+
+  const Notifs = assertNotifications();
+  const ok = await requestNotificationPermission();
+  if (!ok) return;
+
+  const debugId = `debug-${Date.now()}`;
+
+  const trigger: NotificationsType.NotificationTriggerInput = {
+    type: Notifs.SchedulableTriggerInputTypes.TIME_INTERVAL,
+    seconds,
+    repeats: false,
+  };
+
+  await Notifs.scheduleNotificationAsync({
+    identifier: debugId,
+    content: {
+      title: "DEBUG DAYLOOP",
+      body: `Esta es una notificación de prueba (${seconds}s)`,
+      sound: Platform.OS === "ios" ? "default" : undefined,
+    },
+    trigger,
+  });
 }
