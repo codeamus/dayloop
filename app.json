@@ -45,7 +45,8 @@
       ],
       [
         "expo-notifications"
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
