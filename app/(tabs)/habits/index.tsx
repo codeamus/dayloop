@@ -42,6 +42,11 @@ function RightActions({ onDelete }: { onDelete: () => void }) {
 export default function HabitsListScreen() {
   const { habits, loading, remove } = useAllHabits();
 
+  const goBackSafe = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)"); // fallback seguro
+  };
+
   function confirmDelete(id: string, name: string) {
     Alert.alert(
       "Eliminar hábito",
@@ -68,11 +73,7 @@ export default function HabitsListScreen() {
     <Screen>
       {/* HEADER */}
       <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={10}
-        >
+        <Pressable onPress={goBackSafe} style={styles.backButton} hitSlop={10}>
           <Text style={styles.backIcon}>‹</Text>
           <Text style={styles.backText}>Volver</Text>
         </Pressable>
@@ -114,7 +115,8 @@ export default function HabitsListScreen() {
         >
           <Pressable
             style={styles.item}
-            onPress={() => router.push(`/habits/${h.id}`)}
+            // ✅ explícito dentro de tabs (evita ambigüedad de rutas)
+            onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
           >
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.name}>{h.name}</Text>

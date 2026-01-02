@@ -1,7 +1,7 @@
 // app/(tabs)/_layout.tsx
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, usePathname } from "expo-router";
+import { router, Tabs, usePathname } from "expo-router";
 import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -57,6 +57,7 @@ export default function TabsLayout() {
       />
 
       {/* MY HABITS */}
+
       <Tabs.Screen
         name="habits"
         options={{
@@ -64,6 +65,12 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="checkmark-done-outline" size={size} color={color} />
           ),
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault(); // ✅ evitamos el comportamiento default
+            router.replace("/habits"); // ✅ siempre lista
+          },
         }}
       />
 
