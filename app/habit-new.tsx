@@ -16,12 +16,31 @@ import {
   View,
 } from "react-native";
 
+import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 
-import { scheduleHabitReminder } from "@/core/notifications/notifications";
+// ======================
+// Paleta Dayloop (nueva)
+// ======================
+const PALETTE = {
+  bg: "#2b3e4a", // fondo app
+  surface: "#324956", // sheet/card un poquito más claro
+  border: "#3f5a69", // bordes
+  text: "#f1e9d7", // texto principal
+  muted: "#cfc7b6", // texto secundario
+  primary: "#e6bc01", // CTA / highlight
+  success: "#8ecd6e", // ok
+};
 
-const COLOR_OPTIONS = ["#22c55e", "#3b82f6", "#f97316", "#ec4899", "#a855f7"];
+const COLOR_OPTIONS = [
+  PALETTE.primary,
+  PALETTE.success,
+  "#5aa9e6", // azul suave
+  "#f08a5d", // naranja suave
+  "#c06c84", // rosa dusty
+];
+
 const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
 
 type HabitType = "daily" | "weekly";
@@ -34,7 +53,7 @@ export default function HabitNewScreen() {
 
   const REMINDER_OPTIONS = [
     { label: "Sin recordatorio", value: null as null | number },
-    { label: "A la hora", value: 0 },
+    { label: "Justo a la hora", value: 0 },
     { label: "5 min antes", value: 5 },
     { label: "10 min antes", value: 10 },
     { label: "30 min antes", value: 30 },
@@ -47,7 +66,7 @@ export default function HabitNewScreen() {
 
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("daily");
-  const [color, setColor] = useState<string>(COLOR_OPTIONS[2]);
+  const [color, setColor] = useState<string>(PALETTE.primary);
   const [emoji, setEmoji] = useState<string>("🔥");
   const [time, setTime] = useState<string>("08:00");
 
@@ -62,7 +81,7 @@ export default function HabitNewScreen() {
   const todayIndex = new Date().getDay(); // 0-6
   const [weeklyDays, setWeeklyDays] = useState<number[]>([todayIndex]);
 
-  const snapPoints = useMemo(() => ["75%"], []);
+  const snapPoints = useMemo(() => ["78%"], []);
 
   const handleSheetChange = useCallback(
     (index: number) => {
@@ -105,7 +124,7 @@ export default function HabitNewScreen() {
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
-      Alert.alert("Falta el nombre", "Escribe un nombre para el hábito.");
+      Alert.alert("Ponle un nombre", "Ej: Tomar agua, Leer 10 minutos...");
       return;
     }
 
@@ -122,15 +141,11 @@ export default function HabitNewScreen() {
     const result = await create(payload);
 
     if (!result.ok) {
-      Alert.alert(
-        "Error al crear",
-        "No se pudo crear el hábito. Inténtalo de nuevo."
-      );
+      Alert.alert("No se pudo guardar", "Inténtalo nuevamente.");
       return;
     }
 
     // Programar recordatorio real del hábito (si NO es "Sin recordatorio")
-    // Ajusta cómo obtienes el habitId según el retorno real de tu hook
     const habitId: string | null =
       (result as any)?.habit?.id ?? (result as any)?.id ?? null;
 
@@ -179,7 +194,18 @@ export default function HabitNewScreen() {
           handleIndicatorStyle={styles.handleIndicator}
         >
           <BottomSheetView style={styles.content}>
-            <Text style={styles.title}>Crear nuevo hábito</Text>
+            <View style={styles.headerRow}>
+              <Text style={styles.title}>Nuevo hábito</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {type === "daily" ? "Diario" : "Semanal"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.subtitle}>
+              Define el hábito, el horario y (si quieres) un recordatorio.
+            </Text>
 
             {/* Nombre */}
             <View style={styles.field}>
@@ -187,15 +213,15 @@ export default function HabitNewScreen() {
               <TextInput
                 value={name}
                 onChangeText={setName}
-                placeholder="Ej: Tomar agua, Leer 10 minutos..."
-                placeholderTextColor="#9ca3af"
+                placeholder="Ej: Tomar agua"
+                placeholderTextColor={PALETTE.muted}
                 style={styles.input}
               />
             </View>
 
             {/* Tipo */}
             <View style={styles.field}>
-              <Text style={styles.label}>Tipo</Text>
+              <Text style={styles.label}>Frecuencia</Text>
               <View style={styles.row}>
                 <ToggleChip
                   label="Diario"
@@ -213,7 +239,7 @@ export default function HabitNewScreen() {
             {/* Días de la semana (solo para semanal) */}
             {type === "weekly" && (
               <View style={styles.field}>
-                <Text style={styles.label}>Días de la semana</Text>
+                <Text style={styles.label}>Días</Text>
                 <WeekdaySelector
                   selectedDays={weeklyDays}
                   onChange={setWeeklyDays}
@@ -223,12 +249,15 @@ export default function HabitNewScreen() {
 
             {/* Hora */}
             <View style={styles.field}>
-              <Text style={styles.label}>Hora del día</Text>
+              <Text style={styles.label}>Hora</Text>
               <Pressable
                 style={styles.timeButton}
                 onPress={() => setShowTimePicker((prev) => !prev)}
               >
                 <Text style={styles.timeButtonText}>{time}</Text>
+                <View style={styles.timePill}>
+                  <Text style={styles.timePillText}>Cambiar</Text>
+                </View>
               </Pressable>
 
               {showTimePicker && (
@@ -300,7 +329,7 @@ export default function HabitNewScreen() {
 
             {/* Emoji */}
             <View style={styles.field}>
-              <Text style={styles.label}>Emoji</Text>
+              <Text style={styles.label}>Ícono</Text>
               <View style={styles.row}>
                 {EMOJI_OPTIONS.map((e) => (
                   <Pressable
@@ -318,7 +347,7 @@ export default function HabitNewScreen() {
             </View>
 
             {/* Botones */}
-            <View className="footerRow" style={styles.footerRow}>
+            <View style={styles.footerRow}>
               <Pressable
                 style={styles.cancelButton}
                 onPress={handleClose}
@@ -328,12 +357,12 @@ export default function HabitNewScreen() {
               </Pressable>
 
               <Pressable
-                style={[styles.primaryButton, isLoading && { opacity: 0.5 }]}
+                style={[styles.primaryButton, isLoading && { opacity: 0.6 }]}
                 onPress={handleSubmit}
                 disabled={isLoading}
               >
                 <Text style={styles.primaryText}>
-                  {isLoading ? "Creando..." : "Crear hábito"}
+                  {isLoading ? "Guardando..." : "Guardar hábito"}
                 </Text>
               </Pressable>
             </View>
@@ -368,69 +397,119 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "transparent" },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.65)",
   },
+
   sheetBackground: {
-    backgroundColor: "#020617",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: PALETTE.surface,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
   },
   handleIndicator: {
-    backgroundColor: "#4b5563",
-    width: 40,
+    backgroundColor: PALETTE.border,
+    width: 44,
   },
+
   content: {
     paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 32,
-    gap: 16,
+    paddingTop: 14,
+    paddingBottom: 28,
+    gap: 12,
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
-    color: "#f9fafb",
-    marginBottom: 4,
+    color: PALETTE.text,
   },
-  field: { gap: 8 },
-  label: { fontSize: 14, color: "#9ca3af" },
-  input: {
-    borderRadius: 12,
+  subtitle: {
+    marginTop: -6,
+    fontSize: 13,
+    color: PALETTE.muted,
+    lineHeight: 18,
+  },
+
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(230,188,1,0.14)",
     borderWidth: 1,
-    borderColor: "#374151",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#f9fafb",
-    fontSize: 14,
-    backgroundColor: "#020617",
+    borderColor: "rgba(230,188,1,0.35)",
   },
+  badgeText: {
+    fontSize: 12,
+    color: PALETTE.primary,
+    fontWeight: "600",
+  },
+
+  field: { gap: 8, marginTop: 6 },
+  label: { fontSize: 13, color: PALETTE.muted, fontWeight: "600" },
+
+  input: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: PALETTE.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: PALETTE.text,
+    fontSize: 14,
+    backgroundColor: "rgba(43,62,74,0.35)",
+  },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     flexWrap: "wrap",
   },
+
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#4b5563",
+    borderColor: PALETTE.border,
+    backgroundColor: "rgba(43,62,74,0.25)",
   },
   chipActive: {
-    backgroundColor: "#22c55e",
-    borderColor: "#22c55e",
+    backgroundColor: "rgba(230,188,1,0.18)",
+    borderColor: "rgba(230,188,1,0.55)",
   },
-  chipText: { fontSize: 13, color: "#e5e7eb" },
-  chipTextActive: { color: "#020617", fontWeight: "600" },
+  chipText: { fontSize: 13, color: PALETTE.text },
+  chipTextActive: { color: PALETTE.primary, fontWeight: "700" },
+
   timeButton: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: PALETTE.border,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(43,62,74,0.25)",
   },
-  timeButtonText: { fontSize: 14, color: "#f9fafb" },
+  timeButtonText: { fontSize: 16, color: PALETTE.text, fontWeight: "700" },
+  timePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.16)",
+  },
+  timePillText: { color: PALETTE.text, fontSize: 12, fontWeight: "600" },
+
   colorDot: {
     width: 28,
     height: 28,
@@ -438,60 +517,68 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
-  colorDotActive: { borderColor: "#ffffff" },
+  colorDotActive: { borderColor: PALETTE.text },
+
   emojiChip: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#4b5563",
+    borderColor: PALETTE.border,
+    backgroundColor: "rgba(43,62,74,0.25)",
   },
   emojiChipActive: {
-    backgroundColor: "#1f2937",
-    borderColor: "#f97316",
+    backgroundColor: "rgba(142,205,110,0.12)",
+    borderColor: "rgba(142,205,110,0.55)",
   },
   emoji: { fontSize: 20 },
+
   footerRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
     gap: 12,
-    marginTop: 8,
+    marginTop: 10,
   },
   cancelButton: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#4b5563",
+    borderColor: PALETTE.border,
+    backgroundColor: "rgba(43,62,74,0.20)",
   },
-  cancelText: { color: "#e5e7eb", fontSize: 14 },
+  cancelText: { color: PALETTE.text, fontSize: 14, fontWeight: "600" },
+
   primaryButton: {
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "#22c55e",
+    backgroundColor: PALETTE.primary,
   },
-  primaryText: { color: "#020617", fontSize: 14, fontWeight: "600" },
+  primaryText: { color: PALETTE.bg, fontSize: 14, fontWeight: "800" },
+
   timePickerContainer: {
     marginTop: 8,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#1f2937",
-    backgroundColor: "#020617",
+    borderColor: PALETTE.border,
+    backgroundColor: "rgba(43,62,74,0.35)",
   },
   timeDoneButton: {
     alignSelf: "flex-end",
-    marginTop: 4,
+    marginTop: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#4b5563",
+    borderColor: "rgba(241,233,215,0.18)",
+    backgroundColor: "rgba(241,233,215,0.08)",
   },
   timeDoneText: {
     fontSize: 13,
-    color: "#e5e7eb",
+    color: PALETTE.text,
+    fontWeight: "700",
   },
 });
