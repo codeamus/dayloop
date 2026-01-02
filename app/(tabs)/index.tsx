@@ -1,4 +1,4 @@
-// app/index.tsx
+// app/(tabs)/index.tsx
 import { Screen } from "@/presentation/components/Screen";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { colors } from "@/theme/colors";

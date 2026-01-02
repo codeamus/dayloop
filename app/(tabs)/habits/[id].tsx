@@ -1,3 +1,4 @@
+// app/(tabs)/habits/[id].tsx
 import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";

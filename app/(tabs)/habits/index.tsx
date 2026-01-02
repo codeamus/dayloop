@@ -1,4 +1,4 @@
-// app/habits/index.tsx
+// app/(tabs)/habits/index.tsx
 import type { HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useAllHabits } from "@/presentation/hooks/useAllHabits";
