@@ -1,4 +1,3 @@
-// src/data/sqlite/SqliteHabitRepository.ts
 import type {
   EndCondition,
   Habit,
@@ -15,8 +14,8 @@ type HabitRow = {
   color: string;
   icon: string;
 
-  schedule_type: "daily" | "weekly";
-  schedule_days: string | null; // JSON: number[]
+  schedule_type: "daily" | "weekly" | "monthly";
+  schedule_days: string | null; // JSON: number[] (weekly: daysOfWeek, monthly: daysOfMonth)
   end_condition: string | null; // JSON EndCondition
   time_of_day: TimeOfDay | null;
 
@@ -31,28 +30,61 @@ type HabitRow = {
   reminder_offset_minutes: number | null;
 };
 
+function safeJsonArray(v: string | null): number[] {
+  if (!v) return [];
+  try {
+    const parsed = JSON.parse(v);
+    return Array.isArray(parsed)
+      ? parsed.map(Number).filter(Number.isFinite)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function parseSchedule(row: HabitRow): HabitSchedule {
   if (row.schedule_type === "weekly") {
-    const days: number[] = row.schedule_days
-      ? JSON.parse(row.schedule_days)
-      : [];
+    const days = safeJsonArray(row.schedule_days).map((n) =>
+      Math.max(0, Math.min(6, n))
+    );
     return { type: "weekly", daysOfWeek: days };
   }
+
+  if (row.schedule_type === "monthly") {
+    const days = safeJsonArray(row.schedule_days).map((n) =>
+      Math.max(1, Math.min(31, n))
+    );
+    return { type: "monthly", daysOfMonth: days };
+  }
+
   return { type: "daily" };
 }
 
 function parseEndCondition(row: HabitRow): EndCondition {
-  return row.end_condition
-    ? (JSON.parse(row.end_condition) as EndCondition)
-    : { type: "none" };
+  if (!row.end_condition) return { type: "none" };
+  try {
+    const parsed = JSON.parse(row.end_condition) as EndCondition;
+    if (!parsed || typeof parsed !== "object" || !("type" in parsed))
+      return { type: "none" };
+    if (
+      parsed.type === "byDate" &&
+      typeof (parsed as any).endDate === "string"
+    ) {
+      return parsed;
+    }
+    if (parsed.type === "none") return parsed;
+    return { type: "none" };
+  } catch {
+    return { type: "none" };
+  }
 }
 
 function rowToHabit(row: HabitRow): Habit {
   const schedule = parseSchedule(row);
   const endCondition = parseEndCondition(row);
 
-  const startTime = row.start_time ?? row.time ?? "08:00"; // fallback seguro
-  const endTime = row.end_time ?? null;
+  const startTime = row.start_time ?? row.time ?? "08:00";
+  const endTime = row.end_time ?? "08:30";
 
   return {
     id: row.id,
@@ -69,12 +101,19 @@ function rowToHabit(row: HabitRow): Habit {
     // legacy
     time: row.time ?? startTime,
 
-    timeOfDay: row.time_of_day ?? undefined,
+    timeOfDay: (row.time_of_day ?? "morning") as TimeOfDay,
 
     calendarEventId: row.calendar_event_id ?? null,
-
     reminderOffsetMinutes: row.reminder_offset_minutes ?? null,
   };
+}
+
+function scheduleDaysToJson(schedule: HabitSchedule): string | null {
+  if (schedule.type === "weekly")
+    return JSON.stringify(schedule.daysOfWeek ?? []);
+  if (schedule.type === "monthly")
+    return JSON.stringify(schedule.daysOfMonth ?? []);
+  return null;
 }
 
 export class SqliteHabitRepository implements HabitRepository {
@@ -91,8 +130,8 @@ export class SqliteHabitRepository implements HabitRepository {
   }
 
   async create(habit: Habit): Promise<void> {
-    // startTime requerido en dominio, pero igual protegemos por si legacy
     const startTime = habit.startTime ?? habit.time ?? "08:00";
+    const endTime = habit.endTime ?? "08:30";
 
     db.runSync(
       `
@@ -114,11 +153,9 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.icon,
 
         habit.schedule.type,
-        habit.schedule.type === "weekly"
-          ? JSON.stringify(habit.schedule.daysOfWeek)
-          : null,
+        scheduleDaysToJson(habit.schedule),
 
-        JSON.stringify(habit.endCondition),
+        JSON.stringify(habit.endCondition ?? { type: "none" }),
         habit.timeOfDay ?? null,
 
         // legacy
@@ -126,7 +163,7 @@ export class SqliteHabitRepository implements HabitRepository {
 
         // nuevo
         startTime,
-        habit.endTime ?? null,
+        endTime,
         habit.calendarEventId ?? null,
 
         habit.reminderOffsetMinutes ?? null,
@@ -136,6 +173,7 @@ export class SqliteHabitRepository implements HabitRepository {
 
   async update(habit: Habit): Promise<void> {
     const startTime = habit.startTime ?? habit.time ?? "08:00";
+    const endTime = habit.endTime ?? "08:30";
 
     db.runSync(
       `
@@ -163,11 +201,9 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.icon,
 
         habit.schedule.type,
-        habit.schedule.type === "weekly"
-          ? JSON.stringify(habit.schedule.daysOfWeek)
-          : null,
+        scheduleDaysToJson(habit.schedule),
 
-        JSON.stringify(habit.endCondition),
+        JSON.stringify(habit.endCondition ?? { type: "none" }),
         habit.timeOfDay ?? null,
 
         // legacy
@@ -175,7 +211,7 @@ export class SqliteHabitRepository implements HabitRepository {
 
         // nuevo
         startTime,
-        habit.endTime ?? null,
+        endTime,
         habit.calendarEventId ?? null,
 
         habit.reminderOffsetMinutes ?? null,

@@ -53,9 +53,8 @@ export default function RootLayout() {
             name="habit-new"
             options={{
               presentation: "transparentModal",
-              contentStyle: {
-                backgroundColor: "transparent",
-              },
+              animation: "fade",
+              contentStyle: { backgroundColor: "transparent" },
             }}
           />
         </Stack>

@@ -1,9 +1,9 @@
 // app/habit-new.tsx
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -15,6 +15,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
@@ -31,8 +32,26 @@ const COLOR_OPTIONS = [
 
 const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
 
-type HabitType = "daily" | "weekly";
+type HabitType = "daily" | "weekly" | "monthly";
 type PickerTarget = "start" | "end";
+type EndMode = "none" | "byDate";
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function dateToYMD(d: Date): string {
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
+}
+
+function ymdToDate(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  // al mediodía para evitar edge cases de TZ
+  return new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0, 0);
+}
 
 function hhmmToMinutes(hhmm: string): number {
   const [hStr, mStr] = hhmm.split(":");
@@ -59,8 +78,52 @@ function buildDateForTime(hhmm: string): Date {
   return d;
 }
 
+function uniqSorted(nums: number[]) {
+  return Array.from(new Set(nums)).sort((a, b) => a - b);
+}
+
+function clampDayOfMonth(n: number) {
+  return Math.max(1, Math.min(31, n));
+}
+
+function DayOfMonthSelector({
+  selected,
+  onChange,
+}: {
+  selected: number[];
+  onChange: (next: number[]) => void;
+}) {
+  const toggle = (day: number) => {
+    const d = clampDayOfMonth(day);
+    const has = selected.includes(d);
+    const next = has ? selected.filter((x) => x !== d) : [...selected, d];
+    onChange(uniqSorted(next));
+  };
+
+  return (
+    <View style={styles.domGrid}>
+      {Array.from({ length: 31 }).map((_, idx) => {
+        const day = idx + 1;
+        const active = selected.includes(day);
+        return (
+          <Pressable
+            key={day}
+            onPress={() => toggle(day)}
+            style={[styles.domChip, active && styles.domChipActive]}
+            hitSlop={6}
+          >
+            <Text style={[styles.domText, active && styles.domTextActive]}>
+              {day}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function HabitNewScreen() {
-  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const bottomSheetRef = useRef<BottomSheet>(null);
 
   const { create, isLoading } = useCreateHabit();
@@ -89,41 +152,47 @@ export default function HabitNewScreen() {
     addMinutesHHmm("08:00", 30)
   );
 
-  // Picker
+  // Picker (horario)
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget>("start");
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
 
+  // Weekly
   const todayIndex = new Date().getDay(); // 0-6
   const [weeklyDays, setWeeklyDays] = useState<number[]>([todayIndex]);
 
-  const snapPoints = useMemo(() => ["78%"], []);
+  // Monthly
+  const todayDom = new Date().getDate(); // 1-31
+  const [monthlyDays, setMonthlyDays] = useState<number[]>([todayDom]);
 
-  const handleSheetChange = useCallback(
-    (index: number) => {
-      if (index === -1) router.back();
-    },
-    [router]
+  // End condition UI
+  const [endMode, setEndMode] = useState<EndMode>("none");
+  const [endDate, setEndDate] = useState<string>(() => dateToYMD(new Date()));
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [endPickerDate, setEndPickerDate] = useState<Date>(() =>
+    ymdToDate(dateToYMD(new Date()))
   );
 
-  const handleClose = useCallback(() => {
-    router.back();
-  }, [router]);
+  // ✅ Modal-friendly: detached + margen + safe area
+  const snapPoints = useMemo(() => ["92%"], []);
 
-  const handleBackgroundPress = useCallback(() => {
+  const close = useCallback(() => {
+    // cierra sheet con animación + vuelve atrás
     bottomSheetRef.current?.close();
     router.back();
-  }, [router]);
+  }, []);
+
+  const onSheetChange = useCallback((index: number) => {
+    if (index === -1) router.back();
+  }, []);
 
   const openPickerFor = useCallback(
     (target: PickerTarget) => {
       setPickerTarget(target);
-
       const current = target === "start" ? startTime : endTime;
       setPickerDate(buildDateForTime(current));
-
       setShowTimePicker(true);
     },
     [startTime, endTime]
@@ -137,25 +206,18 @@ export default function HabitNewScreen() {
       }
 
       const d = selectedDate ?? pickerDate;
-
       const hh = String(d.getHours()).padStart(2, "0");
       const mm = String(d.getMinutes()).padStart(2, "0");
       const picked = `${hh}:${mm}`;
 
       if (pickerTarget === "start") {
         setStartTime(picked);
-
-        // si el fin queda inválido, lo ajustamos a +30
         const startMin = hhmmToMinutes(picked);
         const endMin = hhmmToMinutes(endTime);
-        if (endMin <= startMin) {
-          setEndTime(minutesToHHmm(startMin + 30));
-        }
+        if (endMin <= startMin) setEndTime(minutesToHHmm(startMin + 30));
       } else {
-        // end
         const startMin = hhmmToMinutes(startTime);
         const endMin = hhmmToMinutes(picked);
-
         if (endMin <= startMin) {
           Alert.alert(
             "Horario inválido",
@@ -167,10 +229,28 @@ export default function HabitNewScreen() {
       }
 
       setPickerDate(d);
-
       if (Platform.OS === "android") setShowTimePicker(false);
     },
     [pickerDate, pickerTarget, startTime, endTime]
+  );
+
+  const openEndDate = useCallback(() => {
+    setEndPickerDate(ymdToDate(endDate));
+    setShowEndDatePicker(true);
+  }, [endDate]);
+
+  const handleEndDateChange = useCallback(
+    (event: DateTimePickerEvent, selected?: Date) => {
+      if (event.type === "dismissed") {
+        if (Platform.OS === "android") setShowEndDatePicker(false);
+        return;
+      }
+      const d = selected ?? endPickerDate;
+      setEndPickerDate(d);
+      setEndDate(dateToYMD(d));
+      if (Platform.OS === "android") setShowEndDatePicker(false);
+    },
+    [endPickerDate]
   );
 
   const handleSubmit = useCallback(async () => {
@@ -181,11 +261,23 @@ export default function HabitNewScreen() {
 
     const startMin = hhmmToMinutes(startTime);
     const endMin = hhmmToMinutes(endTime);
-
     if (endMin <= startMin) {
       Alert.alert(
         "Horario inválido",
         "La hora de fin debe ser mayor que la hora de inicio."
+      );
+      return;
+    }
+
+    if (type === "weekly" && weeklyDays.length === 0) {
+      Alert.alert("Selecciona días", "Elige al menos un día para semanal.");
+      return;
+    }
+
+    if (type === "monthly" && monthlyDays.length === 0) {
+      Alert.alert(
+        "Selecciona días del mes",
+        "Elige al menos un día para mensual."
       );
       return;
     }
@@ -197,12 +289,19 @@ export default function HabitNewScreen() {
       type,
       startTime,
       endTime,
+
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
+      monthlyDays: type === "monthly" ? monthlyDays : undefined,
+
+      endCondition:
+        endMode === "byDate"
+          ? { type: "byDate" as const, endDate }
+          : { type: "none" as const },
+
       reminderOffsetMinutes,
     };
 
-    const result = await create(payload);
-
+    const result = await create(payload as any);
     if (!result.ok) {
       Alert.alert("No se pudo guardar", "Inténtalo nuevamente.");
       return;
@@ -217,14 +316,24 @@ export default function HabitNewScreen() {
     startTime,
     endTime,
     weeklyDays,
+    monthlyDays,
+    endMode,
+    endDate,
     reminderOffsetMinutes,
     create,
-    router,
   ]);
 
+  const badgeLabel =
+    type === "daily" ? "Diario" : type === "weekly" ? "Semanal" : "Mensual";
+
   return (
-    <View style={styles.overlay}>
-      <Pressable style={styles.backdrop} onPress={handleBackgroundPress} />
+    <View style={styles.modalRoot}>
+      {/* Backdrop */}
+      <Pressable
+        style={styles.backdrop}
+        onPress={close}
+        accessibilityLabel="Cerrar modal"
+      />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -235,22 +344,32 @@ export default function HabitNewScreen() {
           index={0}
           snapPoints={snapPoints}
           enablePanDownToClose
-          onChange={handleSheetChange}
+          onChange={onSheetChange}
+          detached
+          bottomInset={Math.max(insets.bottom, 12)}
+          style={[styles.sheet, { marginTop: insets.top + 10 }]}
           backgroundStyle={styles.sheetBackground}
           handleIndicatorStyle={styles.handleIndicator}
         >
-          <BottomSheetView style={styles.content}>
+          <BottomSheetScrollView
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: Math.max(insets.bottom, 16) + 18 },
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header */}
             <View style={styles.headerRow}>
               <Text style={styles.title}>Nuevo hábito</Text>
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {type === "daily" ? "Diario" : "Semanal"}
-                </Text>
+                <Text style={styles.badgeText}>{badgeLabel}</Text>
               </View>
             </View>
 
             <Text style={styles.subtitle}>
-              Define el hábito, el horario y (si quieres) un recordatorio.
+              Define el hábito, la frecuencia, el horario y (si quieres) un
+              recordatorio.
             </Text>
 
             {/* Nombre */}
@@ -265,7 +384,7 @@ export default function HabitNewScreen() {
               />
             </View>
 
-            {/* Tipo */}
+            {/* Frecuencia */}
             <View style={styles.field}>
               <Text style={styles.label}>Frecuencia</Text>
               <View style={styles.row}>
@@ -279,10 +398,15 @@ export default function HabitNewScreen() {
                   active={type === "weekly"}
                   onPress={() => setType("weekly")}
                 />
+                <ToggleChip
+                  label="Mensual"
+                  active={type === "monthly"}
+                  onPress={() => setType("monthly")}
+                />
               </View>
             </View>
 
-            {/* Días (solo semanal) */}
+            {/* Semanal */}
             {type === "weekly" && (
               <View style={styles.field}>
                 <Text style={styles.label}>Días</Text>
@@ -292,6 +416,75 @@ export default function HabitNewScreen() {
                 />
               </View>
             )}
+
+            {/* Mensual */}
+            {type === "monthly" && (
+              <View style={styles.field}>
+                <View style={styles.inlineHeader}>
+                  <Text style={styles.label}>Días del mes</Text>
+                  <View style={styles.helperPill}>
+                    <Text style={styles.helperPillText}>
+                      Si eliges 31, en meses cortos se usa el último día.
+                    </Text>
+                  </View>
+                </View>
+
+                <DayOfMonthSelector
+                  selected={monthlyDays}
+                  onChange={setMonthlyDays}
+                />
+              </View>
+            )}
+
+            {/* Fin del hábito */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Fin del hábito</Text>
+
+              <View style={styles.row}>
+                <ToggleChip
+                  label="Infinito"
+                  active={endMode === "none"}
+                  onPress={() => setEndMode("none")}
+                />
+                <ToggleChip
+                  label="Termina en fecha"
+                  active={endMode === "byDate"}
+                  onPress={() => setEndMode("byDate")}
+                />
+              </View>
+
+              {endMode === "byDate" && (
+                <View style={{ marginTop: 8 }}>
+                  <Pressable onPress={openEndDate} style={styles.dateButton}>
+                    <Text style={styles.dateButtonText}>{endDate}</Text>
+                    <View style={styles.datePill}>
+                      <Text style={styles.datePillText}>Fecha fin</Text>
+                    </View>
+                  </Pressable>
+
+                  {showEndDatePicker && (
+                    <View style={styles.datePickerContainer}>
+                      <DateTimePicker
+                        value={endPickerDate}
+                        mode="date"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={handleEndDateChange}
+                        themeVariant="dark"
+                      />
+
+                      {Platform.OS === "ios" && (
+                        <Pressable
+                          style={styles.dateDoneButton}
+                          onPress={() => setShowEndDatePicker(false)}
+                        >
+                          <Text style={styles.dateDoneText}>Listo</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
 
             {/* Horario */}
             <View style={styles.field}>
@@ -386,7 +579,7 @@ export default function HabitNewScreen() {
               </View>
             </View>
 
-            {/* Emoji */}
+            {/* Ícono */}
             <View style={styles.field}>
               <Text style={styles.label}>Ícono</Text>
               <View style={styles.row}>
@@ -405,11 +598,11 @@ export default function HabitNewScreen() {
               </View>
             </View>
 
-            {/* Botones */}
+            {/* Footer */}
             <View style={styles.footerRow}>
               <Pressable
                 style={styles.cancelButton}
-                onPress={handleClose}
+                onPress={close}
                 disabled={isLoading}
               >
                 <Text style={styles.cancelText}>Cancelar</Text>
@@ -425,20 +618,22 @@ export default function HabitNewScreen() {
                 </Text>
               </Pressable>
             </View>
-          </BottomSheetView>
+          </BottomSheetScrollView>
         </BottomSheet>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-type ToggleChipProps = {
+function ToggleChip({
+  label,
+  active,
+  onPress,
+}: {
   label: string;
   active: boolean;
   onPress: () => void;
-};
-
-function ToggleChip({ label, active, onPress }: ToggleChipProps) {
+}) {
   return (
     <Pressable
       onPress={onPress}
@@ -453,19 +648,28 @@ function ToggleChip({ label, active, onPress }: ToggleChipProps) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: "transparent" },
+
+  modalRoot: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.65)",
   },
 
+  sheet: {
+    marginHorizontal: 12,
+  },
+
   sheetBackground: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderRadius: 26,
     borderWidth: 1,
     borderColor: colors.border,
   },
+
   handleIndicator: {
     backgroundColor: colors.border,
     width: 44,
@@ -474,7 +678,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 14,
-    paddingBottom: 28,
     gap: 12,
   },
 
@@ -484,11 +687,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
+
   title: {
     fontSize: 22,
     fontWeight: "700",
     color: colors.text,
   },
+
   subtitle: {
     marginTop: -6,
     fontSize: 13,
@@ -504,6 +709,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(230,188,1,0.35)",
   },
+
   badgeText: {
     fontSize: 12,
     color: colors.primary,
@@ -511,6 +717,7 @@ const styles = StyleSheet.create({
   },
 
   field: { gap: 8, marginTop: 6 },
+
   label: { fontSize: 13, color: colors.mutedText, fontWeight: "600" },
 
   input: {
@@ -539,13 +746,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.25)",
   },
+
   chipActive: {
     backgroundColor: "rgba(230,188,1,0.18)",
     borderColor: "rgba(230,188,1,0.55)",
   },
+
   chipText: { fontSize: 13, color: colors.text },
+
   chipTextActive: { color: colors.primary, fontWeight: "700" },
 
+  // Horario
   timeButton: {
     borderRadius: 14,
     borderWidth: 1,
@@ -558,7 +769,9 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "rgba(43,62,74,0.25)",
   },
+
   timeButtonText: { fontSize: 16, color: colors.text, fontWeight: "700" },
+
   timePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -567,54 +780,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(241,233,215,0.16)",
   },
+
   timePillText: { color: colors.text, fontSize: 12, fontWeight: "600" },
-
-  colorDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  colorDotActive: { borderColor: colors.text },
-
-  emojiChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(43,62,74,0.25)",
-  },
-  emojiChipActive: {
-    backgroundColor: "rgba(142,205,110,0.12)",
-    borderColor: "rgba(142,205,110,0.55)",
-  },
-  emoji: { fontSize: 20 },
-
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-    marginTop: 10,
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(43,62,74,0.20)",
-  },
-  cancelText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-
-  primaryButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: colors.primary,
-  },
-  primaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
 
   timePickerContainer: {
     marginTop: 8,
@@ -625,6 +792,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.35)",
   },
+
   timeDoneButton: {
     alignSelf: "flex-end",
     marginTop: 6,
@@ -635,9 +803,170 @@ const styles = StyleSheet.create({
     borderColor: "rgba(241,233,215,0.18)",
     backgroundColor: "rgba(241,233,215,0.08)",
   },
+
   timeDoneText: {
     fontSize: 13,
     color: colors.text,
     fontWeight: "700",
+  },
+
+  // Fin del hábito (fecha)
+  dateButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(43,62,74,0.25)",
+  },
+
+  dateButtonText: { fontSize: 16, color: colors.text, fontWeight: "700" },
+
+  datePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.16)",
+  },
+
+  datePillText: { color: colors.text, fontSize: 12, fontWeight: "600" },
+
+  datePickerContainer: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.35)",
+  },
+
+  dateDoneButton: {
+    alignSelf: "flex-end",
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.18)",
+    backgroundColor: "rgba(241,233,215,0.08)",
+  },
+
+  dateDoneText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: "700",
+  },
+
+  // Color
+  colorDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+
+  colorDotActive: { borderColor: colors.text },
+
+  // Emoji
+  emojiChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.25)",
+  },
+
+  emojiChipActive: {
+    backgroundColor: "rgba(142,205,110,0.12)",
+    borderColor: "rgba(142,205,110,0.55)",
+  },
+
+  emoji: { fontSize: 20 },
+
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 10,
+  },
+
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.20)",
+  },
+
+  cancelText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+
+  primaryButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+
+  primaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
+
+  // Mensual
+  domGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  domChip: {
+    width: 44,
+    height: 36,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(43,62,74,0.25)",
+  },
+
+  domChipActive: {
+    backgroundColor: "rgba(230,188,1,0.18)",
+    borderColor: "rgba(230,188,1,0.55)",
+  },
+
+  domText: { color: colors.text, fontSize: 13, fontWeight: "800" },
+
+  domTextActive: { color: colors.primary },
+
+  inlineHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+
+  helperPill: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.16)",
+    backgroundColor: "rgba(241,233,215,0.06)",
+  },
+
+  helperPillText: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
   },
 });

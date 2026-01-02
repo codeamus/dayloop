@@ -1,5 +1,3 @@
-// src/domain/entities/Habit.ts
-
 export type HabitId = string;
 
 export type TimeOfDay = "morning" | "afternoon" | "evening";
@@ -10,15 +8,19 @@ export type DailySchedule = {
 
 export type WeeklySchedule = {
   type: "weekly";
-  daysOfWeek: number[]; // 0-6
+  daysOfWeek: number[]; // 0-6 (Dom..Sáb)
 };
 
-export type HabitSchedule = DailySchedule | WeeklySchedule;
+export type MonthlySchedule = {
+  type: "monthly";
+  daysOfMonth: number[]; // 1-31
+};
 
+export type HabitSchedule = DailySchedule | WeeklySchedule | MonthlySchedule;
 
 export type EndCondition =
   | { type: "none" }
-  | { type: "byDate"; endDate: string }; // "2025-01-10"
+  | { type: "byDate"; endDate: string }; // "YYYY-MM-DD"
 
 export type Habit = {
   id: HabitId;
@@ -28,15 +30,17 @@ export type Habit = {
 
   schedule: HabitSchedule;
 
-  // 🧱 Bloque horario (para calendario y UI)
+  // 🧱 Bloque horario
   startTime: string; // "HH:mm"
   endTime: string; // "HH:mm"
 
   // ⚠️ Legacy (se eliminará más adelante)
-  // Lo seguimos devolviendo igual a startTime
   time?: string;
 
   timeOfDay: TimeOfDay;
+
+  // ✅ NUEVO: condición de término
+  endCondition: EndCondition;
 
   // 📅 Apple Calendar / Google Calendar
   calendarEventId?: string | null;

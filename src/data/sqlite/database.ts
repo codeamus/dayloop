@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function initDatabase() {
   db.execSync(`
@@ -58,6 +58,10 @@ function migrateIfNeeded() {
       migrateToV2();
     }
 
+    if (user_version < 3) {
+      migrateToV3();
+    }
+
     db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     db.execSync(`COMMIT;`);
   } catch (e) {
@@ -68,7 +72,7 @@ function migrateIfNeeded() {
 }
 
 // ==========================
-// MIGRACIÓN V2
+// MIGRACIÓN V2 (ya la tenías)
 // ==========================
 function migrateToV2() {
   safeAddColumn("habits", "start_time", "TEXT");
@@ -110,6 +114,36 @@ function migrateToV2() {
     UPDATE habits
     SET end_time = '08:30'
     WHERE end_time IS NULL;
+  `);
+}
+
+// ==========================
+// MIGRACIÓN V3 (mensual + normalización segura)
+// ==========================
+function migrateToV3() {
+  // 1) Normaliza schedule_type
+  // Si por alguna razón existe null/vacío -> daily
+  db.execSync(`
+    UPDATE habits
+    SET schedule_type = 'daily'
+    WHERE schedule_type IS NULL OR trim(schedule_type) = '';
+  `);
+
+  // 2) Normaliza schedule_days para weekly/monthly
+  // Evita JSON.parse crash si viene null y el tipo requiere array
+  db.execSync(`
+    UPDATE habits
+    SET schedule_days = '[]'
+    WHERE schedule_type IN ('weekly','monthly')
+      AND (schedule_days IS NULL OR trim(schedule_days) = '');
+  `);
+
+  // 3) Normaliza end_condition (si quieres)
+  // Si viene null -> {"type":"none"} (tu repo ya hace fallback, esto es opcional)
+  db.execSync(`
+    UPDATE habits
+    SET end_condition = '{"type":"none"}'
+    WHERE end_condition IS NULL OR trim(end_condition) = '';
   `);
 }
 

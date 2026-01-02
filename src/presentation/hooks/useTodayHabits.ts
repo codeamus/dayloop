@@ -1,6 +1,7 @@
 // src/presentation/hooks/useTodayHabits.ts
 import { container } from "@/core/di/container";
-import { TimeOfDay } from "@/utils/timeOfDay";
+import { isHabitDueToday } from "@/domain/services/habitDue"; // ✅ NUEVO
+import type { TimeOfDay } from "@/utils/timeOfDay";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 
@@ -8,10 +9,7 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-/**
- * ✅ Fecha LOCAL en formato YYYY-MM-DD
- * (evita el bug de UTC con toISOString() que puede cambiar el día en Chile)
- */
+/** Fecha LOCAL YYYY-MM-DD */
 const todayStr = () => {
   const d = new Date();
   const y = d.getFullYear();
@@ -19,6 +17,11 @@ const todayStr = () => {
   const day = pad2(d.getDate());
   return `${y}-${m}-${day}`;
 };
+
+function todayLocalDate() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
 
 export type FrequencyType = "daily" | "weekly" | "monthly";
 
@@ -31,14 +34,10 @@ export type TodayHabitVM = {
   scheduleType: FrequencyType;
   timeOfDay?: TimeOfDay;
 
-  // ✅ NUEVO
   startTime?: string | null;
   endTime?: string | null;
-
-  // ⚠️ legacy opcional
-  time?: string | null;
+  time?: string | null; // legacy
 };
-
 
 function getScheduleType(habit: any): FrequencyType {
   const t = habit?.schedule?.type;
@@ -46,7 +45,7 @@ function getScheduleType(habit: any): FrequencyType {
   return "daily";
 }
 
-function hhmmToMinutes(hhmm?: string): number {
+function hhmmToMinutes(hhmm?: string | null): number {
   if (!hhmm) return Number.POSITIVE_INFINITY;
   const [hStr, mStr] = hhmm.split(":");
   const h = Number(hStr);
@@ -63,33 +62,37 @@ export function useTodayHabits() {
   const load = useCallback(async () => {
     setLoading(true);
 
-    const date = todayStr();
-    const result = await container.getTodayHabits.execute(date);
+    const dateStr = todayStr();
+    const today = todayLocalDate();
+
+    // ⚠️ Si este caso de uso ya filtra "hoy", no pasa nada: el filter será redundante.
+    const result = await container.getTodayHabits.execute(dateStr);
     // result: [{ habit, done }]
 
-    const mapped: TodayHabitVM[] = result.map(({ habit, done }: any) => {
-      return {
-        id: habit.id,
-        name: habit.name,
-        color: habit.color,
-        icon: habit.icon,
-        done,
-        scheduleType: getScheduleType(habit),
-        timeOfDay: habit.timeOfDay,
+    const mapped: TodayHabitVM[] = result
+      // ✅ ENCHUFE: filtra por schedule + endCondition
+      .filter(({ habit }: any) => isHabitDueToday(habit, today))
+      .map(({ habit, done }: any) => {
+        return {
+          id: habit.id,
+          name: habit.name,
+          color: habit.color,
+          icon: habit.icon,
+          done,
+          scheduleType: getScheduleType(habit),
+          timeOfDay: habit.timeOfDay,
 
-        // ✅ NUEVO
-        startTime: habit.startTime ?? null,
-        endTime: habit.endTime ?? null,
+          startTime: habit.startTime ?? null,
+          endTime: habit.endTime ?? null,
+          time: habit.time ?? null,
+        };
+      });
 
-        // ⚠️ legacy
-        time: habit.time ?? null,
-      };
-    });
-
-
-    // ✅ orden por startTime para que Home salga “por horario”
+    // orden por startTime
     mapped.sort(
-      (a, b) => hhmmToMinutes(a.startTime) - hhmmToMinutes(b.startTime)
+      (a, b) =>
+        hhmmToMinutes(a.startTime ?? a.time) -
+        hhmmToMinutes(b.startTime ?? b.time)
     );
 
     setHabits(mapped);
@@ -103,19 +106,15 @@ export function useTodayHabits() {
   useFocusEffect(
     useCallback(() => {
       load();
+      return () => {};
     }, [load])
   );
 
   async function toggle(id: string) {
-    const date = todayStr();
-    await container.toggleHabitForToday.execute(id, date);
+    const dateStr = todayStr();
+    await container.toggleHabitForToday.execute(id, dateStr);
     await load();
   }
 
-  return {
-    loading,
-    habits,
-    toggle,
-    refresh: load,
-  };
+  return { loading, habits, toggle, refresh: load };
 }
