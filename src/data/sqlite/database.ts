@@ -2,7 +2,8 @@ import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
 
-// Ejecutado una vez al inicio
+const SCHEMA_VERSION = 2;
+
 export function initDatabase() {
   db.execSync(`
     PRAGMA journal_mode = WAL;
@@ -16,7 +17,15 @@ export function initDatabase() {
       schedule_days TEXT,
       end_condition TEXT,
       time_of_day TEXT,
+
+      -- LEGACY (no borrar aún)
       time TEXT,
+
+      -- NUEVO (bloques calendario)
+      start_time TEXT,
+      end_time TEXT,
+      calendar_event_id TEXT,
+
       reminder_offset_minutes INTEGER
     );
 
@@ -29,4 +38,88 @@ export function initDatabase() {
       UNIQUE(habit_id, date)
     );
   `);
+
+  migrateIfNeeded();
+}
+
+// ==========================
+// MIGRACIONES
+// ==========================
+function migrateIfNeeded() {
+  const row = db.getFirstSync<{ user_version: number }>(`PRAGMA user_version;`);
+  const user_version = row?.user_version ?? 0;
+
+  if (user_version >= SCHEMA_VERSION) return;
+
+  db.execSync(`BEGIN TRANSACTION;`);
+
+  try {
+    if (user_version < 2) {
+      migrateToV2();
+    }
+
+    db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+    db.execSync(`COMMIT;`);
+  } catch (e) {
+    console.error("[DB] Migration failed", e);
+    db.execSync(`ROLLBACK;`);
+    throw e;
+  }
+}
+
+// ==========================
+// MIGRACIÓN V2
+// ==========================
+function migrateToV2() {
+  safeAddColumn("habits", "start_time", "TEXT");
+  safeAddColumn("habits", "end_time", "TEXT");
+  safeAddColumn("habits", "calendar_event_id", "TEXT");
+
+  // Poblar start_time desde time (legacy)
+  db.execSync(`
+    UPDATE habits
+    SET start_time = time
+    WHERE start_time IS NULL AND time IS NOT NULL;
+  `);
+
+  // end_time = start_time + 30 min (solo si start_time tiene formato HH:mm válido)
+  db.execSync(`
+    UPDATE habits
+    SET end_time =
+      printf(
+        '%02d:%02d',
+        ((CAST(substr(start_time, 1, 2) AS INTEGER) * 60 +
+          CAST(substr(start_time, 4, 2) AS INTEGER) + 30) / 60) % 24,
+        (CAST(substr(start_time, 1, 2) AS INTEGER) * 60 +
+         CAST(substr(start_time, 4, 2) AS INTEGER) + 30) % 60
+      )
+    WHERE end_time IS NULL
+      AND start_time IS NOT NULL
+      AND start_time GLOB '[0-2][0-9]:[0-5][0-9]';
+  `);
+
+  // fallback final (si por cualquier razón no quedó start_time)
+  db.execSync(`
+    UPDATE habits
+    SET start_time = '08:00', end_time = '08:30'
+    WHERE start_time IS NULL;
+  `);
+
+  // fallback adicional: si quedó end_time null
+  db.execSync(`
+    UPDATE habits
+    SET end_time = '08:30'
+    WHERE end_time IS NULL;
+  `);
+}
+
+// ==========================
+// Helpers
+// ==========================
+function safeAddColumn(table: string, column: string, type: string) {
+  try {
+    db.execSync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+  } catch {
+    // ya existe → ignoramos
+  }
 }

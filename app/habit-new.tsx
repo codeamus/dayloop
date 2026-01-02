@@ -1,4 +1,3 @@
-// app/habit-new.tsx
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -16,22 +15,48 @@ import {
   View,
 } from "react-native";
 
-import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import { colors } from "@/theme/colors";
+import { addMinutesHHmm } from "@/utils/time";
 
 const COLOR_OPTIONS = [
   colors.primary,
   colors.success,
-  "#5aa9e6", // azul suave
-  "#f08a5d", // naranja suave
-  "#c06c84", // rosa dusty
+  "#5aa9e6",
+  "#f08a5d",
+  "#c06c84",
 ];
 
 const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
 
 type HabitType = "daily" | "weekly";
+type PickerTarget = "start" | "end";
+
+function hhmmToMinutes(hhmm: string): number {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr);
+  const safeH = Number.isFinite(h) ? Math.max(0, Math.min(23, h)) : 0;
+  const safeM = Number.isFinite(m) ? Math.max(0, Math.min(59, m)) : 0;
+  return safeH * 60 + safeM;
+}
+
+function minutesToHHmm(total: number): string {
+  const min = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = String(Math.floor(min / 60)).padStart(2, "0");
+  const mm = String(min % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function buildDateForTime(hhmm: string): Date {
+  const d = new Date();
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr) || 0;
+  const m = Number(mStr) || 0;
+  d.setHours(h, m, 0, 0);
+  return d;
+}
 
 export default function HabitNewScreen() {
   const router = useRouter();
@@ -56,15 +81,19 @@ export default function HabitNewScreen() {
   const [type, setType] = useState<HabitType>("daily");
   const [color, setColor] = useState<string>(colors.primary);
   const [emoji, setEmoji] = useState<string>("🔥");
-  const [time, setTime] = useState<string>("08:00");
 
-  const [timeDate, setTimeDate] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(8, 0, 0, 0);
-    return d;
-  });
+  // ✅ Bloque horario
+  const [startTime, setStartTime] = useState<string>("08:00");
+  const [endTime, setEndTime] = useState<string>(() =>
+    addMinutesHHmm("08:00", 30)
+  );
 
+  // Picker
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget>("start");
+  const [pickerDate, setPickerDate] = useState<Date>(() =>
+    buildDateForTime("08:00")
+  );
 
   const todayIndex = new Date().getDay(); // 0-6
   const [weeklyDays, setWeeklyDays] = useState<number[]>([todayIndex]);
@@ -87,6 +116,18 @@ export default function HabitNewScreen() {
     router.back();
   }, [router]);
 
+  const openPickerFor = useCallback(
+    (target: PickerTarget) => {
+      setPickerTarget(target);
+
+      const current = target === "start" ? startTime : endTime;
+      setPickerDate(buildDateForTime(current));
+
+      setShowTimePicker(true);
+    },
+    [startTime, endTime]
+  );
+
   const handleTimeChange = useCallback(
     (event: DateTimePickerEvent, selectedDate?: Date) => {
       if (event.type === "dismissed") {
@@ -94,20 +135,41 @@ export default function HabitNewScreen() {
         return;
       }
 
-      const currentDate = selectedDate ?? timeDate;
+      const d = selectedDate ?? pickerDate;
 
-      const hours = currentDate.getHours();
-      const minutes = currentDate.getMinutes();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const picked = `${hh}:${mm}`;
 
-      const hh = String(hours).padStart(2, "0");
-      const mm = String(minutes).padStart(2, "0");
+      if (pickerTarget === "start") {
+        setStartTime(picked);
 
-      setTime(`${hh}:${mm}`);
-      setTimeDate(currentDate);
+        // si el fin queda inválido, lo ajustamos a +30
+        const startMin = hhmmToMinutes(picked);
+        const endMin = hhmmToMinutes(endTime);
+        if (endMin <= startMin) {
+          setEndTime(minutesToHHmm(startMin + 30));
+        }
+      } else {
+        // end
+        const startMin = hhmmToMinutes(startTime);
+        const endMin = hhmmToMinutes(picked);
+
+        if (endMin <= startMin) {
+          Alert.alert(
+            "Horario inválido",
+            "La hora de fin debe ser mayor que la hora de inicio."
+          );
+        } else {
+          setEndTime(picked);
+        }
+      }
+
+      setPickerDate(d);
 
       if (Platform.OS === "android") setShowTimePicker(false);
     },
-    [timeDate]
+    [pickerDate, pickerTarget, startTime, endTime]
   );
 
   const handleSubmit = useCallback(async () => {
@@ -116,12 +178,24 @@ export default function HabitNewScreen() {
       return;
     }
 
+    const startMin = hhmmToMinutes(startTime);
+    const endMin = hhmmToMinutes(endTime);
+
+    if (endMin <= startMin) {
+      Alert.alert(
+        "Horario inválido",
+        "La hora de fin debe ser mayor que la hora de inicio."
+      );
+      return;
+    }
+
     const payload = {
       name: name.trim(),
       color,
       icon: emoji,
       type,
-      time,
+      startTime,
+      endTime,
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
       reminderOffsetMinutes,
     };
@@ -133,31 +207,14 @@ export default function HabitNewScreen() {
       return;
     }
 
-    // Programar recordatorio real del hábito (si NO es "Sin recordatorio")
-    const habitId: string | null =
-      (result as any)?.habit?.id ?? (result as any)?.id ?? null;
-
-    if (habitId && reminderOffsetMinutes !== null) {
-      const [hh, mm] = time.split(":").map((x) => Number(x));
-
-      if (Number.isFinite(hh) && Number.isFinite(mm)) {
-        await scheduleHabitReminder({
-          habitId: habitId as any,
-          habitName: name.trim(),
-          hour: hh,
-          minute: mm,
-          offsetMinutes: reminderOffsetMinutes ?? 0,
-        });
-      }
-    }
-
     router.back();
   }, [
     name,
     color,
     emoji,
     type,
-    time,
+    startTime,
+    endTime,
     weeklyDays,
     reminderOffsetMinutes,
     create,
@@ -224,7 +281,7 @@ export default function HabitNewScreen() {
               </View>
             </View>
 
-            {/* Días de la semana (solo para semanal) */}
+            {/* Días (solo semanal) */}
             {type === "weekly" && (
               <View style={styles.field}>
                 <Text style={styles.label}>Días</Text>
@@ -235,23 +292,36 @@ export default function HabitNewScreen() {
               </View>
             )}
 
-            {/* Hora */}
+            {/* Horario */}
             <View style={styles.field}>
-              <Text style={styles.label}>Hora</Text>
-              <Pressable
-                style={styles.timeButton}
-                onPress={() => setShowTimePicker((prev) => !prev)}
-              >
-                <Text style={styles.timeButtonText}>{time}</Text>
-                <View style={styles.timePill}>
-                  <Text style={styles.timePillText}>Cambiar</Text>
-                </View>
-              </Pressable>
+              <Text style={styles.label}>Horario</Text>
+
+              <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+                <Pressable
+                  style={styles.timeButton}
+                  onPress={() => openPickerFor("start")}
+                >
+                  <Text style={styles.timeButtonText}>{startTime}</Text>
+                  <View style={styles.timePill}>
+                    <Text style={styles.timePillText}>Inicio</Text>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  style={styles.timeButton}
+                  onPress={() => openPickerFor("end")}
+                >
+                  <Text style={styles.timeButtonText}>{endTime}</Text>
+                  <View style={styles.timePill}>
+                    <Text style={styles.timePillText}>Fin</Text>
+                  </View>
+                </Pressable>
+              </View>
 
               {showTimePicker && (
                 <View style={styles.timePickerContainer}>
                   <DateTimePicker
-                    value={timeDate}
+                    value={pickerDate}
                     mode="time"
                     is24Hour
                     display={Platform.OS === "ios" ? "spinner" : "default"}

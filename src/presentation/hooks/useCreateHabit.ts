@@ -1,9 +1,7 @@
-// src/presentation/hooks/useCreateHabit.ts
 import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import { SqliteHabitRepository } from "@/data/sqlite/SqliteHabitRepository";
 import type {
   EndCondition,
-  Habit,
   HabitSchedule,
   TimeOfDay,
 } from "@/domain/entities/Habit";
@@ -16,17 +14,18 @@ const createHabitUseCase = new CreateHabit(habitRepository);
 export type CreateHabitFormInput = {
   name: string;
   color: string;
-  icon: string; // emoji
+  icon: string;
   type: "daily" | "weekly";
-  time: string; // "HH:mm"
-  weeklyDays?: number[]; // 0–6
-  reminderOffsetMinutes?: number;
+
+  startTime: string; // "HH:mm"
+  endTime?: string; // opcional
+
+  weeklyDays?: number[];
+  reminderOffsetMinutes?: number | null;
 };
 
 function inferTimeOfDayFromTime(time: string): TimeOfDay {
-  const [hStr] = time.split(":");
-  const hour = Number(hStr) || 0;
-
+  const hour = Number(time.split(":")[0]) || 0;
   if (hour < 12) return "morning";
   if (hour < 18) return "afternoon";
   return "evening";
@@ -36,23 +35,23 @@ function buildSchedule(
   type: "daily" | "weekly",
   weeklyDays?: number[]
 ): HabitSchedule {
-  const todayIndex = new Date().getDay(); // 0-6
-
   if (type === "daily") {
-    // Hábito todos los días
     return { type: "daily", daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
   }
 
-  const days = weeklyDays && weeklyDays.length > 0 ? weeklyDays : [todayIndex];
-
-  return { type: "weekly", daysOfWeek: days };
+  const today = new Date().getDay();
+  return {
+    type: "weekly",
+    daysOfWeek: weeklyDays?.length ? weeklyDays : [today],
+  };
 }
 
-function parseTimeToHourMinute(time: string): { hour: number; minute: number } {
-  const [hStr, mStr] = time.split(":");
-  const hour = Math.max(0, Math.min(23, Number(hStr) || 0));
-  const minute = Math.max(0, Math.min(59, Number(mStr) || 0));
-  return { hour, minute };
+function parseTime(time: string) {
+  const [h, m] = time.split(":");
+  return {
+    hour: Number(h) || 0,
+    minute: Number(m) || 0,
+  };
 }
 
 export function useCreateHabit() {
@@ -64,53 +63,40 @@ export function useCreateHabit() {
     setError(null);
 
     try {
-      const schedule: HabitSchedule = buildSchedule(
-        input.type,
-        input.weeklyDays
-      );
+      const schedule = buildSchedule(input.type, input.weeklyDays);
       const endCondition: EndCondition = { type: "none" };
-      const timeOfDay: TimeOfDay = inferTimeOfDayFromTime(input.time);
+      const timeOfDay = inferTimeOfDayFromTime(input.startTime);
 
-      const habit: Habit = await createHabitUseCase.execute({
+      const habit = await createHabitUseCase.execute({
         name: input.name,
         color: input.color,
         icon: input.icon,
         schedule,
         endCondition,
         timeOfDay,
-        time: input.time,
-        reminderOffsetMinutes:
-          input.reminderOffsetMinutes != null
-            ? input.reminderOffsetMinutes
-            : undefined,
+        startTime: input.startTime,
+        endTime: input.endTime,
+        reminderOffsetMinutes: input.reminderOffsetMinutes ?? null,
       });
 
-      // Después de crear el hábito
-      try {
-        if (input.reminderOffsetMinutes != null) {
-          const { hour, minute } = parseTimeToHourMinute(input.time);
-          await scheduleHabitReminder({
-            habitId: habit.id,
-            habitName: habit.name,
-            hour,
-            minute,
-            offsetMinutes: input.reminderOffsetMinutes,
-          });
-        }
-      } catch (notifError) {
-        console.warn(
-          "[useCreateHabit] No se pudo programar recordatorio del hábito",
-          notifError
-        );
+      // 🔔 Programar notificación
+      if (input.reminderOffsetMinutes != null) {
+        const { hour, minute } = parseTime(input.startTime);
+        await scheduleHabitReminder({
+          habitId: habit.id,
+          habitName: habit.name,
+          hour,
+          minute,
+          offsetMinutes: input.reminderOffsetMinutes,
+        });
       }
 
       setIsLoading(false);
       return { ok: true as const, habit };
     } catch (e) {
       const err = e as Error;
-      console.error("Error creando hábito:", err);
-      setIsLoading(false);
       setError(err);
+      setIsLoading(false);
       return { ok: false as const, error: err };
     }
   }, []);

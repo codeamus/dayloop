@@ -1,11 +1,11 @@
 // src/domain/entities/Habit.ts
+
 export type HabitId = string;
 
 export type TimeOfDay = "morning" | "afternoon" | "evening";
 
 export type DailySchedule = {
   type: "daily";
-  daysOfWeek: number[]; // 0-6
 };
 
 export type WeeklySchedule = {
@@ -15,20 +15,32 @@ export type WeeklySchedule = {
 
 export type HabitSchedule = DailySchedule | WeeklySchedule;
 
+
 export type EndCondition =
   | { type: "none" }
   | { type: "byDate"; endDate: string }; // "2025-01-10"
 
-export interface Habit {
+export type Habit = {
   id: HabitId;
   name: string;
-  color: string;
   icon: string;
+  color: string;
 
   schedule: HabitSchedule;
-  endCondition: EndCondition;
 
-  timeOfDay?: TimeOfDay; // OPCIONAL
-  time?: string; // OPCIONAL ("HH:mm")
-  reminderOffsetMinutes?: number; // ej: 0, 5, 10, 15, 30, 60
-}
+  // 🧱 Bloque horario (para calendario y UI)
+  startTime: string; // "HH:mm"
+  endTime: string; // "HH:mm"
+
+  // ⚠️ Legacy (se eliminará más adelante)
+  // Lo seguimos devolviendo igual a startTime
+  time?: string;
+
+  timeOfDay: TimeOfDay;
+
+  // 📅 Apple Calendar / Google Calendar
+  calendarEventId?: string | null;
+
+  // 🔔 Notificaciones
+  reminderOffsetMinutes?: number | null;
+};

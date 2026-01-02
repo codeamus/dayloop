@@ -1,16 +1,20 @@
-// app/habits/[id].tsx  (o donde tengas este screen)
 import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
 import { colors } from "@/theme/colors";
+import { addMinutesHHmm } from "@/utils/time";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -28,9 +32,35 @@ const WEEK_DAYS = [
   { label: "S", value: 6 },
 ];
 
-// Mantengo tus presets, pero estilizados con la nueva paleta
 const COLOR_PRESETS = ["#e6bc01", "#8ecd6e", "#f1e9d7", "#2b3e4a", "#ef4444"];
 const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
+
+type PickerTarget = "start" | "end";
+
+function hhmmToMinutes(hhmm: string): number {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr);
+  const safeH = Number.isFinite(h) ? Math.max(0, Math.min(23, h)) : 0;
+  const safeM = Number.isFinite(m) ? Math.max(0, Math.min(59, m)) : 0;
+  return safeH * 60 + safeM;
+}
+
+function minutesToHHmm(total: number): string {
+  const min = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hh = String(Math.floor(min / 60)).padStart(2, "0");
+  const mm = String(min % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function buildDateForTime(hhmm: string): Date {
+  const d = new Date();
+  const [hStr, mStr] = hhmm.split(":");
+  const h = Number(hStr) || 0;
+  const m = Number(mStr) || 0;
+  d.setHours(h, m, 0, 0);
+  return d;
+}
 
 export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -45,17 +75,25 @@ export default function EditHabitScreen() {
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
-  const [time, setTime] = useState("");
 
-  // Si quieres logs de streaks, acá los dejé fuera (sin console).
+  // ✅ Bloque horario
+  const [startTime, setStartTime] = useState<string>("08:00");
+  const [endTime, setEndTime] = useState<string>("08:30");
+
+  // Picker
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget>("start");
+  const [pickerDate, setPickerDate] = useState<Date>(() =>
+    buildDateForTime("08:00")
+  );
+
   useEffect(() => {
     if (!id) return;
-    // (opcional) precarga o validación silenciosa
     void container.getHabitStreaks.execute(id.toString()).catch(() => null);
   }, [id]);
 
-  // Inicializar el state cuando ya tenemos el hábito
-  useMemo(() => {
+  // ✅ Inicialización correcta con side-effects: useEffect (NO useMemo)
+  useEffect(() => {
     if (!habit) return;
 
     setName(habit.name);
@@ -70,7 +108,11 @@ export default function EditHabitScreen() {
 
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || ICON_PRESETS[0]);
-    setTime(habit.time);
+
+    const s = habit.startTime ?? habit.time ?? "08:00";
+    const e = habit.endTime ?? addMinutesHHmm(s, 30);
+    setStartTime(s);
+    setEndTime(e);
   }, [habit]);
 
   function toggleWeekDay(day: number) {
@@ -78,6 +120,59 @@ export default function EditHabitScreen() {
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
   }
+
+  const openPickerFor = useCallback(
+    (target: PickerTarget) => {
+      setPickerTarget(target);
+      const current = target === "start" ? startTime : endTime;
+      setPickerDate(buildDateForTime(current));
+      setShowTimePicker(true);
+    },
+    [startTime, endTime]
+  );
+
+  const handleTimeChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (event.type === "dismissed") {
+        if (Platform.OS === "android") setShowTimePicker(false);
+        return;
+      }
+
+      const d = selectedDate ?? pickerDate;
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const picked = `${hh}:${mm}`;
+
+      if (pickerTarget === "start") {
+        setStartTime(picked);
+
+        // Si end queda inválido => start + 30
+        const startMin = hhmmToMinutes(picked);
+        const endMin = hhmmToMinutes(endTime);
+        if (endMin <= startMin) {
+          setEndTime(minutesToHHmm(startMin + 30));
+        }
+      } else {
+        // end
+        const startMin = hhmmToMinutes(startTime);
+        const endMin = hhmmToMinutes(picked);
+
+        if (endMin <= startMin) {
+          Alert.alert(
+            "Horario inválido",
+            "La hora de fin debe ser mayor que la hora de inicio."
+          );
+        } else {
+          setEndTime(picked);
+        }
+      }
+
+      setPickerDate(d);
+
+      if (Platform.OS === "android") setShowTimePicker(false);
+    },
+    [pickerDate, pickerTarget, startTime, endTime]
+  );
 
   async function handleSave() {
     if (!habit) return;
@@ -91,7 +186,7 @@ export default function EditHabitScreen() {
     let schedule: HabitSchedule;
 
     if (scheduleType === "daily") {
-      schedule = { type: "daily" };
+      schedule = { type: "daily", daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
     } else {
       if (selectedDays.length === 0) {
         Alert.alert(
@@ -103,7 +198,17 @@ export default function EditHabitScreen() {
       schedule = { type: "weekly", daysOfWeek: [...selectedDays].sort() };
     }
 
-    const timeOfDay = getTimeOfDayFromHour(time);
+    const startMin = hhmmToMinutes(startTime);
+    const endMin = hhmmToMinutes(endTime);
+    if (endMin <= startMin) {
+      Alert.alert(
+        "Horario inválido",
+        "La hora de fin debe ser mayor que la hora de inicio."
+      );
+      return;
+    }
+
+    const timeOfDay = getTimeOfDayFromHour(startTime);
 
     const updated: Habit = {
       ...habit,
@@ -111,7 +216,14 @@ export default function EditHabitScreen() {
       schedule,
       color,
       icon,
-      time,
+
+      // ✅ nuevo
+      startTime,
+      endTime,
+
+      // ⚠️ legacy (compat)
+      time: startTime,
+
       timeOfDay,
     };
 
@@ -329,15 +441,52 @@ export default function EditHabitScreen() {
         </View>
       )}
 
-      {/* Hora */}
-      <Text style={styles.label}>Hora</Text>
-      <TextInput
-        placeholder="Ej: 08:00"
-        placeholderTextColor={colors.mutedText}
-        style={styles.input}
-        value={time}
-        onChangeText={setTime}
-      />
+      {/* Horario */}
+      <Text style={styles.label}>Horario</Text>
+
+      <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+        <Pressable
+          style={styles.timeButton}
+          onPress={() => openPickerFor("start")}
+        >
+          <Text style={styles.timeButtonText}>{startTime}</Text>
+          <View style={styles.timePill}>
+            <Text style={styles.timePillText}>Inicio</Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          style={styles.timeButton}
+          onPress={() => openPickerFor("end")}
+        >
+          <Text style={styles.timeButtonText}>{endTime}</Text>
+          <View style={styles.timePill}>
+            <Text style={styles.timePillText}>Fin</Text>
+          </View>
+        </Pressable>
+      </View>
+
+      {showTimePicker && (
+        <View style={styles.timePickerContainer}>
+          <DateTimePicker
+            value={pickerDate}
+            mode="time"
+            is24Hour
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={handleTimeChange}
+            themeVariant="dark"
+          />
+
+          {Platform.OS === "ios" && (
+            <Pressable
+              style={styles.timeDoneButton}
+              onPress={() => setShowTimePicker(false)}
+            >
+              <Text style={styles.timeDoneText}>Listo</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <Pressable onPress={handleSave} style={styles.btn}>
         <Text style={styles.btnText}>Guardar cambios</Text>
@@ -512,6 +661,54 @@ const styles = StyleSheet.create({
     borderColor: "rgba(230,188,1,0.45)",
   },
   iconChipText: { fontSize: 16 },
+
+  timeButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(43,62,74,0.25)",
+  },
+  timeButtonText: { fontSize: 16, color: colors.text, fontWeight: "900" },
+  timePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.16)",
+  },
+  timePillText: { color: colors.text, fontSize: 12, fontWeight: "900" },
+
+  timePickerContainer: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.35)",
+  },
+  timeDoneButton: {
+    alignSelf: "flex-end",
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.18)",
+    backgroundColor: "rgba(241,233,215,0.08)",
+  },
+  timeDoneText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: "900",
+  },
 
   btn: {
     backgroundColor: colors.primary,
