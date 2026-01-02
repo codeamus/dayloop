@@ -8,19 +8,23 @@ import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { colors } from "@/theme/colors";
 import { useAppFonts } from "@/theme/fonts";
 
-const TAB_BAR_BG = "#ffffff";
+
+// Android navigation bar (abajo)
+const ANDROID_NAV_BG = colors.bg;
+const ANDROID_NAV_STYLE: "light" | "dark" = "light"; // light => icons blancos
 
 export default function RootLayout() {
+  // Nota: si initDatabase ya es idempotente, ok aquí.
+  // Si no, muévelo a useEffect(() => initDatabase(), [])
   initDatabase();
 
   useEffect(() => {
     if (Platform.OS === "android") {
-      // Color de fondo de DAYLOOP
-      NavigationBar.setBackgroundColorAsync(TAB_BAR_BG);
-      // Íconos claros para que se vean bien
-      NavigationBar.setButtonStyleAsync("dark");
+      NavigationBar.setBackgroundColorAsync(ANDROID_NAV_BG);
+      NavigationBar.setButtonStyleAsync(ANDROID_NAV_STYLE);
     }
   }, []);
 
@@ -29,20 +33,20 @@ export default function RootLayout() {
   }, []);
 
   const fontsLoaded = useAppFonts();
+  if (!fontsLoaded) return null;
 
-  if (!fontsLoaded) return null; // o splash
-  
   return (
-    <SafeAreaProvider>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false }}>
+    <SafeAreaProvider style={{ backgroundColor: colors.bg }}>
+      <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            // ✅ Fondo global consistente con la paleta
+            contentStyle: { backgroundColor: colors.bg },
+          }}
+        >
           {/* Grupo principal de tabs */}
-          <Stack.Screen
-            name="(tabs)"
-            options={{
-              headerShown: false,
-            }}
-          />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
           {/* MODAL: Crear hábito */}
           <Stack.Screen
@@ -50,7 +54,7 @@ export default function RootLayout() {
             options={{
               presentation: "transparentModal",
               contentStyle: {
-                backgroundColor: "transparent", // clave
+                backgroundColor: "transparent",
               },
             }}
           />

@@ -25,4 +25,5 @@ export const colors = {
   // ===== Estados =====
   disabled: "#6b7f8a", // botones deshabilitados
   overlay: "rgba(0,0,0,0.6)", // backdrop modales
+  surfaceOverlay: "rgba(50,73,86,0.55)",
 };

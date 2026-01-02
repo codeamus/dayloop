@@ -1,8 +1,9 @@
 // app/index.tsx
 import { Screen } from "@/presentation/components/Screen";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
+import { colors } from "@/theme/colors";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+
 
 type FrequencyTab = "daily" | "weekly" | "monthly";
 type TimeTab = "all" | "morning" | "afternoon" | "evening";
@@ -23,32 +25,48 @@ export default function TodayScreen() {
   // Fila 2: Todos / Mañana / Tarde / Noche
   const [timeTab, setTimeTab] = useState<TimeTab>("all");
 
+  const filtered = useMemo(() => {
+    const byFrequency = habits.filter((h) => h.scheduleType === frequencyTab);
+    return byFrequency.filter((h) => {
+      if (timeTab === "all") return true;
+      return h.timeOfDay === timeTab;
+    });
+  }, [habits, frequencyTab, timeTab]);
+
+  const pending = filtered.filter((h) => !h.done);
+  const completed = filtered.filter((h) => h.done);
+
   if (loading) {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#8B5CF6" />
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Cargando hábitos…</Text>
         </View>
       </Screen>
     );
   }
 
-  // 1) Filtro por frecuencia
-  const byFrequency = habits.filter((h) => h.scheduleType === frequencyTab);
-  // 2) Filtro por franja horaria
-  const filtered = byFrequency.filter((h) => {
-    if (timeTab === "all") return true;
-    return h.timeOfDay === timeTab;
-  });
-
-  const pending = filtered.filter((h) => !h.done);
-  const completed = filtered.filter((h) => h.done);
-
   return (
     <Screen>
-      {/* HEADER simple */}
+      {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Inicio</Text>
+        <View>
+          <Text style={styles.headerTitle}>Hoy</Text>
+          <Text style={styles.headerSubtitle}>
+            {pending.length > 0
+              ? `${pending.length} pendiente${pending.length === 1 ? "" : "s"}`
+              : "Todo listo por hoy ✅"}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() => router.push("/habit-new")}
+          style={styles.headerCta}
+          hitSlop={8}
+        >
+          <Text style={styles.headerCtaText}>+ Nuevo</Text>
+        </Pressable>
       </View>
 
       {/* Fila 1: Diario / Semanal / Mensual */}
@@ -100,38 +118,68 @@ export default function TodayScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Pendientes */}
-        <Text style={styles.sectionTitle}>Pendientes</Text>
-        {pending.map((h, index) => (
-          <Pressable
-            key={`${h.id}-${index}`} // si tienes IDs duplicados, esto evita el warning
-            style={[styles.habitCard, { backgroundColor: h.color }]}
-            onPress={() => toggle(h.id)}
-          >
-            <Text style={styles.habitText}>{h.name}</Text>
-          </Pressable>
-        ))}
+        <SectionTitle title="Pendientes" />
+        {pending.length === 0 ? (
+          <Text style={styles.emptyText}>
+            No tienes hábitos pendientes aquí.
+          </Text>
+        ) : (
+          pending.map((h, index) => (
+            <Pressable
+              key={`${h.id}-${index}`}
+              style={styles.habitCard}
+              onPress={() => toggle(h.id)}
+            >
+              <View
+                style={[
+                  styles.habitDot,
+                  { backgroundColor: h.color || colors.primary },
+                ]}
+              />
+              <Text style={styles.habitText}>{h.name}</Text>
+              <View style={styles.habitRight}>
+                <Text style={styles.habitHint}>Tocar</Text>
+              </View>
+            </Pressable>
+          ))
+        )}
 
         {/* Completados */}
-        <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-          Completados
-        </Text>
-        {completed.map((h, index) => (
-          <Pressable
-            key={`${h.id}-${index}`}
-            style={[styles.habitCard, { backgroundColor: h.color }]}
-            onPress={() => toggle(h.id)}
-          >
-            <Text style={styles.habitText}>{h.name}</Text>
-          </Pressable>
-        ))}
+        <View style={{ marginTop: 16 }} />
+        <SectionTitle title="Completados" />
+        {completed.length === 0 ? (
+          <Text style={styles.emptyText}>
+            Aún no completas hábitos en esta vista.
+          </Text>
+        ) : (
+          completed.map((h, index) => (
+            <Pressable
+              key={`${h.id}-${index}`}
+              style={[styles.habitCard, styles.habitCardDone]}
+              onPress={() => toggle(h.id)}
+            >
+              <View
+                style={[styles.habitDot, { backgroundColor: colors.success }]}
+              />
+              <Text style={[styles.habitText, styles.habitTextDone]}>
+                {h.name}
+              </Text>
+              <View style={styles.habitRight}>
+                <Text style={[styles.habitHint, styles.habitHintDone]}>
+                  Listo
+                </Text>
+              </View>
+            </Pressable>
+          ))
+        )}
 
-        {/* Crear nuevo */}
+        {/* CTA abajo (por si no usan el +Nuevo del header) */}
         <View style={styles.createWrapper}>
           <Pressable
             style={styles.createButton}
             onPress={() => router.push("/habit-new")}
           >
-            <Text style={styles.createText}>Crear nuevo hábito</Text>
+            <Text style={styles.createText}>Crear hábito</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -140,6 +188,10 @@ export default function TodayScreen() {
 }
 
 /* --------- Subcomponentes --------- */
+
+function SectionTitle({ title }: { title: string }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
 
 type SegmentProps = {
   label: string;
@@ -188,67 +240,100 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 10,
+  },
+  loadingText: {
+    color: colors.mutedText,
+    fontSize: 13,
   },
 
   header: {
-    marginBottom: 16,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
   headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "700",
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  headerSubtitle: {
+    marginTop: 2,
+    color: colors.mutedText,
+    fontSize: 13,
+  },
+  headerCta: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(230,188,1,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.35)",
+  },
+  headerCtaText: {
+    color: colors.primary,
+    fontWeight: "800",
+    fontSize: 13,
   },
 
   topTabs: {
     flexDirection: "row",
-    backgroundColor: "#F3F4F6",
     borderRadius: 999,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: 12,
+    backgroundColor: colors.surfaceOverlay,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
   },
   segmentActive: {
-    backgroundColor: "#8B5CF6",
+    backgroundColor: "rgba(230,188,1,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.40)",
   },
   segmentText: {
     fontSize: 13,
-    color: "#6B7280",
-    fontWeight: "500",
+    color: colors.mutedText,
+    fontWeight: "700",
   },
   segmentTextActive: {
-    color: "#FFFFFF",
+    color: colors.primary,
   },
 
   filterRow: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 14,
     gap: 8,
+    flexWrap: "wrap",
   },
   chip: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#FFFFFF",
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.20)",
   },
   chipActive: {
-    backgroundColor: "#8B5CF6",
-    borderColor: "#8B5CF6",
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderColor: "rgba(241,233,215,0.18)",
   },
   chipText: {
     fontSize: 12,
-    color: "#111827",
+    color: colors.text,
+    fontWeight: "600",
   },
   chipTextActive: {
-    color: "#FFFFFF",
-    fontWeight: "600",
+    color: colors.text,
+    fontWeight: "800",
   },
 
   scroll: {
@@ -259,37 +344,76 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
-    color: "#9CA3AF",
+    color: colors.mutedText,
     fontSize: 13,
     marginBottom: 8,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  emptyText: {
+    color: colors.mutedText,
+    fontSize: 13,
+    marginBottom: 10,
+    lineHeight: 18,
   },
 
   habitCard: {
-    borderRadius: 16,
+    borderRadius: 18,
     paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    backgroundColor: "rgba(50,73,86,0.55)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  habitCardDone: {
+    backgroundColor: "rgba(50,73,86,0.35)",
+  },
+  habitDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
   },
   habitText: {
-    color: "#111827",
+    color: colors.text,
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "800",
+    flex: 1,
+  },
+  habitTextDone: {
+    color: "rgba(241,233,215,0.75)",
+    textDecorationLine: "line-through",
+  },
+  habitRight: {
+    minWidth: 44,
+    alignItems: "flex-end",
+  },
+  habitHint: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  habitHintDone: {
+    color: colors.success,
   },
 
   createWrapper: {
-    marginTop: 24,
+    marginTop: 18,
   },
   createButton: {
-    borderRadius: 16,
+    borderRadius: 18,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: "#8B5CF6",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   createText: {
-    color: "#FFFFFF",
+    color: colors.bg,
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "900",
   },
 });

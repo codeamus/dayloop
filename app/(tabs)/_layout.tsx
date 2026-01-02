@@ -1,48 +1,53 @@
 // app/(tabs)/_layout.tsx
+import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
 import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const TAB_BAR_BG = "#ffffff";
-
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+
   const extraBottom =
     Platform.OS === "android" ? insets.bottom || 8 : insets.bottom;
-
   const isHabitModalOpen = pathname === "/habit-new";
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#8B5CF6",
-        tabBarInactiveTintColor: "#9CA3AF",
-        tabBarStyle: {
-          backgroundColor: "#FFFFFF",
-          borderTopWidth: 0,
-          paddingHorizontal: 12,
-          height: 56 + extraBottom,
-          paddingBottom: extraBottom,
-          paddingTop: 6,
-        },
-        tabBarLabelStyle: [
+
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: "rgba(241,233,215,0.65)",
+
+        tabBarStyle: [
           {
-            fontSize: 10,
-            backgroundColor: TAB_BAR_BG,
-            borderTopColor: "#e5e7eb",
-            height: 56 + extraBottom,
+            backgroundColor: colors.surface,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            paddingHorizontal: 12,
+            height: 58 + extraBottom,
             paddingBottom: extraBottom,
-            paddingTop: 6,
+            paddingTop: 8,
           },
           isHabitModalOpen && { display: "none" },
         ],
+
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: "700",
+        },
+
+        // Esto ayuda a que no se vea “cuadrado” el tab bar en iOS
+        tabBarItemStyle: {
+          paddingVertical: 2,
+        },
       }}
     >
       {/* HOME */}
       <Tabs.Screen
-        name="index" // app/(tabs)/index.tsx
+        name="index"
         options={{
           title: "Inicio",
           tabBarIcon: ({ color, size }) => (
@@ -53,9 +58,9 @@ export default function TabsLayout() {
 
       {/* MY HABITS */}
       <Tabs.Screen
-        name="habits" // app/(tabs)/habits/index.tsx
+        name="habits"
         options={{
-          title: "Mis Habitos",
+          title: "Mis hábitos",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="checkmark-done-outline" size={size} color={color} />
           ),
@@ -64,9 +69,9 @@ export default function TabsLayout() {
 
       {/* MY STATS */}
       <Tabs.Screen
-        name="stats" // app/(tabs)/stats/index.tsx
+        name="stats"
         options={{
-          title: "Mis Estadísticas",
+          title: "Estadísticas",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart-outline" size={size} color={color} />
           ),
@@ -75,9 +80,9 @@ export default function TabsLayout() {
 
       {/* ACCOUNT / SETTINGS */}
       <Tabs.Screen
-        name="settings" // app/(tabs)/settings/index.tsx
+        name="settings"
         options={{
-          title: "Mi Cuenta",
+          title: "Cuenta",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),

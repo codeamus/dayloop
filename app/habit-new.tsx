@@ -19,23 +19,11 @@ import {
 import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
-
-// ======================
-// Paleta Dayloop (nueva)
-// ======================
-const PALETTE = {
-  bg: "#2b3e4a", // fondo app
-  surface: "#324956", // sheet/card un poquito más claro
-  border: "#3f5a69", // bordes
-  text: "#f1e9d7", // texto principal
-  muted: "#cfc7b6", // texto secundario
-  primary: "#e6bc01", // CTA / highlight
-  success: "#8ecd6e", // ok
-};
+import { colors } from "@/theme/colors";
 
 const COLOR_OPTIONS = [
-  PALETTE.primary,
-  PALETTE.success,
+  colors.primary,
+  colors.success,
   "#5aa9e6", // azul suave
   "#f08a5d", // naranja suave
   "#c06c84", // rosa dusty
@@ -66,7 +54,7 @@ export default function HabitNewScreen() {
 
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("daily");
-  const [color, setColor] = useState<string>(PALETTE.primary);
+  const [color, setColor] = useState<string>(colors.primary);
   const [emoji, setEmoji] = useState<string>("🔥");
   const [time, setTime] = useState<string>("08:00");
 
@@ -214,7 +202,7 @@ export default function HabitNewScreen() {
                 value={name}
                 onChangeText={setName}
                 placeholder="Ej: Tomar agua"
-                placeholderTextColor={PALETTE.muted}
+                placeholderTextColor={colors.mutedText}
                 style={styles.input}
               />
             </View>
@@ -401,14 +389,14 @@ const styles = StyleSheet.create({
   },
 
   sheetBackground: {
-    backgroundColor: PALETTE.surface,
+    backgroundColor: colors.surface,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
   },
   handleIndicator: {
-    backgroundColor: PALETTE.border,
+    backgroundColor: colors.border,
     width: 44,
   },
 
@@ -428,12 +416,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: "700",
-    color: PALETTE.text,
+    color: colors.text,
   },
   subtitle: {
     marginTop: -6,
     fontSize: 13,
-    color: PALETTE.muted,
+    color: colors.mutedText,
     lineHeight: 18,
   },
 
@@ -447,20 +435,20 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    color: PALETTE.primary,
+    color: colors.primary,
     fontWeight: "600",
   },
 
   field: { gap: 8, marginTop: 6 },
-  label: { fontSize: 13, color: PALETTE.muted, fontWeight: "600" },
+  label: { fontSize: 13, color: colors.mutedText, fontWeight: "600" },
 
   input: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: PALETTE.text,
+    color: colors.text,
     fontSize: 14,
     backgroundColor: "rgba(43,62,74,0.35)",
   },
@@ -477,20 +465,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.25)",
   },
   chipActive: {
     backgroundColor: "rgba(230,188,1,0.18)",
     borderColor: "rgba(230,188,1,0.55)",
   },
-  chipText: { fontSize: 13, color: PALETTE.text },
-  chipTextActive: { color: PALETTE.primary, fontWeight: "700" },
+  chipText: { fontSize: 13, color: colors.text },
+  chipTextActive: { color: colors.primary, fontWeight: "700" },
 
   timeButton: {
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
     paddingHorizontal: 14,
     paddingVertical: 12,
     alignSelf: "flex-start",
@@ -499,7 +487,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "rgba(43,62,74,0.25)",
   },
-  timeButtonText: { fontSize: 16, color: PALETTE.text, fontWeight: "700" },
+  timeButtonText: { fontSize: 16, color: colors.text, fontWeight: "700" },
   timePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -508,7 +496,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(241,233,215,0.16)",
   },
-  timePillText: { color: PALETTE.text, fontSize: 12, fontWeight: "600" },
+  timePillText: { color: colors.text, fontSize: 12, fontWeight: "600" },
 
   colorDot: {
     width: 28,
@@ -517,14 +505,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "transparent",
   },
-  colorDotActive: { borderColor: PALETTE.text },
+  colorDotActive: { borderColor: colors.text },
 
   emojiChip: {
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.25)",
   },
   emojiChipActive: {
@@ -544,18 +532,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.20)",
   },
-  cancelText: { color: PALETTE.text, fontSize: 14, fontWeight: "600" },
+  cancelText: { color: colors.text, fontSize: 14, fontWeight: "600" },
 
   primaryButton: {
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: PALETTE.primary,
+    backgroundColor: colors.primary,
   },
-  primaryText: { color: PALETTE.bg, fontSize: 14, fontWeight: "800" },
+  primaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
 
   timePickerContainer: {
     marginTop: 8,
@@ -563,7 +551,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.35)",
   },
   timeDoneButton: {
@@ -578,7 +566,7 @@ const styles = StyleSheet.create({
   },
   timeDoneText: {
     fontSize: 13,
-    color: PALETTE.text,
+    color: colors.text,
     fontWeight: "700",
   },
 });
