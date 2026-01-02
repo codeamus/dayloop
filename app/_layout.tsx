@@ -8,6 +8,8 @@ import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { useAppFonts } from "@/theme/fonts";
+
 const TAB_BAR_BG = "#ffffff";
 
 export default function RootLayout() {
@@ -25,6 +27,11 @@ export default function RootLayout() {
   useEffect(() => {
     initNotificationsConfig();
   }, []);
+
+  const fontsLoaded = useAppFonts();
+
+  if (!fontsLoaded) return null; // o splash
+  
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
