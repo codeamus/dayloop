@@ -1,8 +1,10 @@
+// app/habits/[id].tsx  (o donde tengas este screen)
 import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
+import { colors } from "@/theme/colors";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -26,7 +28,8 @@ const WEEK_DAYS = [
   { label: "S", value: 6 },
 ];
 
-const COLOR_PRESETS = ["#38BDF8", "#A855F7", "#F97316", "#22C55E", "#E11D48"];
+// Mantengo tus presets, pero estilizados con la nueva paleta
+const COLOR_PRESETS = ["#e6bc01", "#8ecd6e", "#f1e9d7", "#2b3e4a", "#ef4444"];
 const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
 
 export default function EditHabitScreen() {
@@ -34,31 +37,27 @@ export default function EditHabitScreen() {
   const habitId = Array.isArray(id) ? id[0] : id;
 
   const { streak } = useHabitStreak(habitId);
-
   const { habit, loading } = useHabit(habitId);
 
   const [name, setName] = useState("");
   const [scheduleType, setScheduleType] =
     useState<HabitSchedule["type"]>("daily");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
-
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
-
   const [time, setTime] = useState("");
 
+  // Si quieres logs de streaks, acá los dejé fuera (sin console).
   useEffect(() => {
     if (!id) return;
-
-    (async () => {
-      const res = await container.getHabitStreaks.execute(id.toString());
-      console.log("STREAKS", res);
-    })();
+    // (opcional) precarga o validación silenciosa
+    void container.getHabitStreaks.execute(id.toString()).catch(() => null);
   }, [id]);
 
   // Inicializar el state cuando ya tenemos el hábito
   useMemo(() => {
     if (!habit) return;
+
     setName(habit.name);
 
     if (habit.schedule.type === "daily") {
@@ -71,7 +70,6 @@ export default function EditHabitScreen() {
 
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || ICON_PRESETS[0]);
-
     setTime(habit.time);
   }, [habit]);
 
@@ -102,10 +100,7 @@ export default function EditHabitScreen() {
         );
         return;
       }
-      schedule = {
-        type: "weekly",
-        daysOfWeek: [...selectedDays].sort(),
-      };
+      schedule = { type: "weekly", daysOfWeek: [...selectedDays].sort() };
     }
 
     const timeOfDay = getTimeOfDayFromHour(time);
@@ -148,7 +143,8 @@ export default function EditHabitScreen() {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#FFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Cargando hábito…</Text>
         </View>
       </Screen>
     );
@@ -178,10 +174,17 @@ export default function EditHabitScreen() {
         </Pressable>
       </View>
 
-      {/* Bloque de streaks */}
-      {!loading && streak && (
+      {/* Rachas */}
+      {!!streak && (
         <View style={styles.streakCard}>
-          <Text style={styles.streakTitle}>Rachas</Text>
+          <View style={styles.streakHeader}>
+            <Text style={styles.streakTitle}>Rachas</Text>
+            <View style={styles.streakPill}>
+              <Text style={styles.streakPillText}>
+                {streak.currentDailyStreak} 🔥
+              </Text>
+            </View>
+          </View>
 
           <View style={styles.streakRow}>
             <Text style={styles.streakLabel}>Racha diaria actual</Text>
@@ -217,15 +220,17 @@ export default function EditHabitScreen() {
         </View>
       )}
 
+      {/* Nombre */}
       <Text style={styles.label}>Nombre</Text>
       <TextInput
         placeholder="Ej: Leer 10 minutos"
-        placeholderTextColor="#64748B"
+        placeholderTextColor={colors.mutedText}
         style={styles.input}
         value={name}
         onChangeText={setName}
       />
 
+      {/* Color */}
       <Text style={styles.label}>Color</Text>
       <View style={styles.colorsRow}>
         {COLOR_PRESETS.map((c) => {
@@ -245,7 +250,8 @@ export default function EditHabitScreen() {
         })}
       </View>
 
-      <Text style={styles.label}>Icono</Text>
+      {/* Ícono */}
+      <Text style={styles.label}>Ícono</Text>
       <View style={styles.iconsRow}>
         {ICON_PRESETS.map((i) => {
           const active = i === icon;
@@ -255,21 +261,14 @@ export default function EditHabitScreen() {
               onPress={() => setIcon(i)}
               style={[styles.iconChip, active && styles.iconChipActive]}
             >
-              <Text
-                style={[
-                  styles.iconChipText,
-                  active && styles.iconChipTextActive,
-                ]}
-              >
-                {i}
-              </Text>
+              <Text style={styles.iconChipText}>{i}</Text>
             </Pressable>
           );
         })}
       </View>
 
+      {/* Frecuencia */}
       <Text style={styles.label}>Frecuencia</Text>
-
       <View style={styles.segmentContainer}>
         <Pressable
           onPress={() => setScheduleType("daily")}
@@ -330,10 +329,11 @@ export default function EditHabitScreen() {
         </View>
       )}
 
+      {/* Hora */}
       <Text style={styles.label}>Hora</Text>
       <TextInput
         placeholder="Ej: 08:00"
-        placeholderTextColor="#64748B"
+        placeholderTextColor={colors.mutedText}
         style={styles.input}
         value={time}
         onChangeText={setTime}
@@ -347,195 +347,182 @@ export default function EditHabitScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+  loadingText: { color: colors.mutedText, fontSize: 13 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
     justifyContent: "space-between",
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   backIcon: {
-    color: "#E5E7EB",
-    fontSize: 20,
-    marginRight: 2,
-  },
-  backText: {
-    color: "#E5E7EB",
-    fontSize: 14,
-  },
-  headerTitle: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 18,
-    fontWeight: "600",
+    marginRight: 2,
+    fontWeight: "900",
   },
+  backText: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  headerTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
+
   deleteButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#DC2626",
+    borderColor: "rgba(239,68,68,0.55)",
+    backgroundColor: "rgba(239,68,68,0.12)",
   },
-  deleteButtonText: {
-    color: "#FCA5A5",
-    fontSize: 12,
-    fontWeight: "600",
+  deleteButtonText: { color: colors.danger, fontSize: 12, fontWeight: "900" },
+
+  streakCard: {
+    marginTop: 10,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "rgba(50,73,86,0.55)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  streakHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  streakTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  streakPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(230,188,1,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.45)",
+  },
+  streakPillText: { color: colors.primary, fontWeight: "900", fontSize: 12 },
+
+  streakRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+  },
+  streakLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "800" },
+  streakValue: { color: colors.text, fontSize: 12, fontWeight: "900" },
+
   label: {
-    color: "#CBD5F5",
-    fontSize: 14,
+    color: colors.mutedText,
+    fontSize: 13,
     marginBottom: 6,
-    marginTop: 12,
+    marginTop: 14,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
+
   input: {
-    backgroundColor: "#1E293B",
-    color: "#fff",
+    backgroundColor: "rgba(50,73,86,0.45)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 16,
+    fontWeight: "700",
   },
+
   segmentContainer: {
     flexDirection: "row",
-    backgroundColor: "#020617",
+    backgroundColor: "rgba(43,62,74,0.35)",
     borderRadius: 999,
-    padding: 3,
-    gap: 4,
+    padding: 4,
+    gap: 6,
     marginTop: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#020617",
   },
-  segmentActive: {
-    backgroundColor: "#38BDF8",
-  },
-  segmentText: {
-    color: "#64748B",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  segmentTextActive: {
-    color: "#0F172A",
-    fontWeight: "700",
-  },
+  segmentActive: { backgroundColor: colors.primary },
+  segmentText: { color: colors.mutedText, fontSize: 13, fontWeight: "900" },
+  segmentTextActive: { color: colors.primaryText, fontWeight: "900" },
+
   weekDaysContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 12,
     marginBottom: 8,
+    gap: 8,
   },
   dayChip: {
-    width: 36,
-    height: 36,
+    flex: 1,
+    height: 38,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(43,62,74,0.20)",
   },
   dayChipActive: {
-    backgroundColor: "#38BDF8",
-    borderColor: "#38BDF8",
+    backgroundColor: "rgba(142,205,110,0.25)",
+    borderColor: "rgba(142,205,110,0.55)",
   },
-  dayChipText: {
-    color: "#94A3B8",
-    fontWeight: "500",
-  },
-  dayChipTextActive: {
-    color: "#0F172A",
-    fontWeight: "700",
-  },
-  btn: {
-    backgroundColor: "#38BDF8",
-    paddingVertical: 14,
-    borderRadius: 10,
-    marginTop: 24,
-  },
-  btnText: {
-    textAlign: "center",
-    color: "#0F172A",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-  colorsRow: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
+  dayChipText: { color: colors.mutedText, fontWeight: "900" },
+  dayChipTextActive: { color: colors.success, fontWeight: "900" },
+
+  colorsRow: { flexDirection: "row", gap: 10, alignItems: "center" },
   colorDotWrapper: {
-    width: 30,
-    height: 30,
+    width: 34,
+    height: 34,
     borderRadius: 999,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
     borderColor: "transparent",
+    backgroundColor: "rgba(43,62,74,0.20)",
   },
-  colorDotWrapperActive: {
-    borderColor: "#38BDF8",
-  },
-  colorDot: {
-    width: 20,
-    height: 20,
-    borderRadius: 999,
-  },
-  iconsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  colorDotWrapperActive: { borderColor: colors.primary },
+  colorDot: { width: 22, height: 22, borderRadius: 999 },
+
+  iconsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   iconChip: {
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.20)",
   },
   iconChipActive: {
-    backgroundColor: "#38BDF8",
-    borderColor: "#38BDF8",
+    backgroundColor: "rgba(230,188,1,0.16)",
+    borderColor: "rgba(230,188,1,0.45)",
   },
-  iconChipText: {
-    fontSize: 16,
+  iconChipText: { fontSize: 16 },
+
+  btn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 22,
   },
-  iconChipTextActive: {
-    color: "#0F172A",
-    fontWeight: "600",
-  },
-  streakCard: {
-    marginTop: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#020617",
-    borderWidth: 1,
-    borderColor: "#1E293B",
-  },
-  streakTitle: {
-    color: "#E5E7EB",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  streakRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  streakLabel: {
-    color: "#9CA3AF",
-    fontSize: 13,
-  },
-  streakValue: {
-    color: "#E5E7EB",
-    fontSize: 13,
-    fontWeight: "600",
+  btnText: {
+    textAlign: "center",
+    color: colors.primaryText,
+    fontWeight: "900",
+    fontSize: 15,
   },
 });

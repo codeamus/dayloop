@@ -2,9 +2,8 @@
 import type { HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useAllHabits } from "@/presentation/hooks/useAllHabits";
+import { colors } from "@/theme/colors";
 import { router } from "expo-router";
-import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
-
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
 function formatSchedule(schedule: HabitSchedule): string {
   if (schedule.type === "daily") return "Diario";
@@ -39,7 +39,6 @@ function RightActions({ onDelete }: { onDelete: () => void }) {
   );
 }
 
-
 export default function HabitsListScreen() {
   const { habits, loading, remove } = useAllHabits();
 
@@ -49,11 +48,7 @@ export default function HabitsListScreen() {
       `¿Seguro que quieres eliminar "${name}"? Se perderá su historial.`,
       [
         { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: () => remove(id),
-        },
+        { text: "Eliminar", style: "destructive", onPress: () => remove(id) },
       ]
     );
   }
@@ -62,7 +57,8 @@ export default function HabitsListScreen() {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#FFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Cargando hábitos…</Text>
         </View>
       </Screen>
     );
@@ -93,7 +89,19 @@ export default function HabitsListScreen() {
       </View>
 
       {habits.length === 0 && (
-        <Text style={styles.empty}>Aún no tienes hábitos creados.</Text>
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyTitle}>Aún no tienes hábitos</Text>
+          <Text style={styles.emptySubtitle}>
+            Crea tu primer hábito y comienza tu loop.
+          </Text>
+
+          <Pressable
+            style={styles.emptyCta}
+            onPress={() => router.push("/habit-new")}
+          >
+            <Text style={styles.emptyCtaText}>Crear hábito</Text>
+          </Pressable>
+        </View>
       )}
 
       {habits.map((h) => (
@@ -108,11 +116,15 @@ export default function HabitsListScreen() {
             style={styles.item}
             onPress={() => router.push(`/habits/${h.id}`)}
           >
-            <View>
+            <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.name}>{h.name}</Text>
               <Text style={styles.schedule}>{formatSchedule(h.schedule)}</Text>
             </View>
-            <Text style={styles.icon}>{h.icon}</Text>
+
+            <View style={styles.right}>
+              <Text style={styles.icon}>{h.icon}</Text>
+              <Text style={styles.chev}>›</Text>
+            </View>
           </Pressable>
         </Swipeable>
       ))}
@@ -121,82 +133,137 @@ export default function HabitsListScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+  loadingText: { color: colors.mutedText, fontSize: 13 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
     justifyContent: "space-between",
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   backIcon: {
-    color: "#E5E7EB",
-    fontSize: 20,
+    color: colors.text,
+    fontSize: 18,
     marginRight: 2,
+    fontWeight: "900",
   },
   backText: {
-    color: "#E5E7EB",
-    fontSize: 14,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
   headerTitle: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "900",
   },
+
   addButton: {
-    backgroundColor: "#38BDF8",
+    backgroundColor: "rgba(230,188,1,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.45)",
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 999,
   },
   addButtonText: {
-    color: "#0F172A",
-    fontWeight: "700",
+    color: colors.primary,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  emptyBox: {
+    marginTop: 10,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "rgba(50,73,86,0.55)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  emptySubtitle: {
+    color: colors.mutedText,
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
+  },
+  emptyCta: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.primary,
+  },
+  emptyCtaText: {
+    color: colors.primaryText,
     fontSize: 14,
+    fontWeight: "900",
   },
-  empty: {
-    color: "#94A3B8",
-  },
+
   item: {
     marginTop: 10,
     padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#0F172A",
+    borderRadius: 18,
+    backgroundColor: "rgba(50,73,86,0.45)",
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   name: {
-    color: "#F9FAFB",
-    fontSize: 16,
-    fontWeight: "500",
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "900",
   },
   schedule: {
-    color: "#9CA3AF",
+    color: colors.mutedText,
     fontSize: 12,
-    marginTop: 2,
+    marginTop: 3,
+    fontWeight: "700",
+  },
+  right: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
   icon: {
     fontSize: 20,
   },
+  chev: {
+    color: "rgba(241,233,215,0.55)",
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: -1,
+  },
+
   deleteAction: {
-    backgroundColor: "#EF4444",
+    backgroundColor: colors.danger,
     justifyContent: "center",
     alignItems: "flex-end",
     paddingHorizontal: 20,
     marginTop: 10,
-    borderRadius: 10,
+    borderRadius: 18,
   },
   deleteText: {
-    color: "#F9FAFB",
-    fontWeight: "700",
+    color: colors.text,
+    fontWeight: "900",
   },
 });

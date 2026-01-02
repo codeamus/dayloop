@@ -1,20 +1,21 @@
 // app/settings/index.tsx
 import {
-     applyReminderSettings,
-     loadReminderSettings,
-     saveReminderSettings,
-     type ReminderSettings,
+  applyReminderSettings,
+  loadReminderSettings,
+  saveReminderSettings,
+  type ReminderSettings,
 } from "@/core/settings/reminderSettings";
 import { Screen } from "@/presentation/components/Screen";
+import { colors } from "@/theme/colors";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-     ActivityIndicator,
-     Pressable,
-     StyleSheet,
-     Switch,
-     Text,
-     View,
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
 } from "react-native";
 
 type PresetKey = "morning" | "afternoon" | "night";
@@ -69,7 +70,8 @@ export default function SettingsScreen() {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#FFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Cargando ajustes…</Text>
         </View>
       </Screen>
     );
@@ -96,35 +98,48 @@ export default function SettingsScreen() {
 
       {/* Sección recordatorio diario */}
       <View style={styles.card}>
-        <View style={styles.row}>
-          <View>
+        <View style={styles.rowTop}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
             <Text style={styles.cardTitle}>Recordatorio diario</Text>
             <Text style={styles.cardSubtitle}>
-              Recibe una notificación para revisar tus hábitos.
+              Te avisamos una vez al día para revisar tus hábitos.
             </Text>
           </View>
 
           <Switch
             value={settings.enabled}
             onValueChange={(value) => updateSettings({ enabled: value })}
+            trackColor={{
+              false: "rgba(63,90,105,0.9)",
+              true: "rgba(230,188,1,0.35)",
+            }}
+            thumbColor={settings.enabled ? colors.primary : colors.mutedText}
+            ios_backgroundColor="rgba(63,90,105,0.9)"
           />
         </View>
 
         <View style={styles.divider} />
 
-        <Text style={styles.sectionLabel}>Horario</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>Horario</Text>
+          {!settings.enabled && (
+            <Text style={styles.sectionHint}>Actívalo para elegir</Text>
+          )}
+        </View>
 
         <View style={styles.presetRow}>
           {(
             Object.entries(PRESETS) as [PresetKey, typeof PRESETS.morning][]
           ).map(([key, preset]) => {
             const active = presetKey === key;
+
             return (
               <Pressable
                 key={key}
                 style={[
                   styles.presetButton,
                   active && styles.presetButtonActive,
+                  !settings.enabled && styles.presetButtonDisabled,
                 ]}
                 onPress={() =>
                   updateSettings({ hour: preset.hour, minute: preset.minute })
@@ -146,11 +161,15 @@ export default function SettingsScreen() {
         </View>
 
         {!presetKey && settings.enabled && (
-          <Text style={styles.infoText}>
-            Tienes un horario personalizado configurado:{" "}
-            {settings.hour.toString().padStart(2, "0")}:
-            {settings.minute.toString().padStart(2, "0")}
-          </Text>
+          <View style={styles.infoBox}>
+            <Text style={styles.infoText}>
+              Horario personalizado:{" "}
+              <Text style={styles.infoTextStrong}>
+                {settings.hour.toString().padStart(2, "0")}:
+                {settings.minute.toString().padStart(2, "0")}
+              </Text>
+            </Text>
+          </View>
         )}
       </View>
     </Screen>
@@ -158,96 +177,141 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+  loadingText: { color: colors.mutedText, fontSize: 13 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
     justifyContent: "space-between",
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   backIcon: {
-    color: "#E5E7EB",
-    fontSize: 20,
+    color: colors.text,
+    fontSize: 18,
     marginRight: 2,
+    fontWeight: "900",
   },
   backText: {
-    color: "#E5E7EB",
-    fontSize: 14,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
   headerTitle: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "800",
   },
 
   card: {
     marginTop: 8,
     padding: 16,
-    borderRadius: 16,
-    backgroundColor: "#020617",
+    borderRadius: 18,
+    backgroundColor: "rgba(50,73,86,0.55)",
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: colors.border,
   },
-  row: {
+  rowTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   cardTitle: {
-    color: "#F9FAFB",
+    color: colors.text,
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "900",
   },
   cardSubtitle: {
-    color: "#9CA3AF",
+    color: colors.mutedText,
     fontSize: 12,
     marginTop: 4,
+    lineHeight: 16,
   },
+
   divider: {
     height: 1,
-    backgroundColor: "#1E293B",
-    marginVertical: 12,
+    backgroundColor: colors.border,
+    marginVertical: 14,
+    opacity: 0.9,
   },
-  sectionLabel: {
-    color: "#CBD5F5",
-    fontSize: 13,
+
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
+  sectionLabel: {
+    color: colors.mutedText,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  sectionHint: {
+    color: "rgba(241,233,215,0.65)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
   presetRow: {
     flexDirection: "column",
-    gap: 8,
+    gap: 10,
   },
   presetButton: {
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#334155",
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.20)",
   },
   presetButtonActive: {
-    backgroundColor: "#38BDF8",
-    borderColor: "#38BDF8",
+    backgroundColor: "rgba(230,188,1,0.18)",
+    borderColor: "rgba(230,188,1,0.55)",
   },
+  presetButtonDisabled: {
+    opacity: 0.55,
+  },
+
   presetText: {
-    color: "#E5E7EB",
+    color: colors.text,
     fontSize: 13,
     textAlign: "center",
+    fontWeight: "800",
   },
   presetTextActive: {
-    color: "#0F172A",
-    fontWeight: "600",
+    color: colors.primary,
   },
   presetTextDisabled: {
-    opacity: 0.5,
+    color: "rgba(241,233,215,0.75)",
+  },
+
+  infoBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(43,62,74,0.25)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   infoText: {
-    color: "#9CA3AF",
-    fontSize: 11,
-    marginTop: 8,
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  infoTextStrong: {
+    color: colors.text,
+    fontWeight: "900",
   },
 });

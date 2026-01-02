@@ -1,13 +1,14 @@
 // app/stats/index.tsx
 import { Screen } from "@/presentation/components/Screen";
 import { useWeeklySummary } from "@/presentation/hooks/useWeeklySummary";
+import { colors } from "@/theme/colors";
 import { router } from "expo-router";
 import {
-     ActivityIndicator,
-     Pressable,
-     StyleSheet,
-     Text,
-     View,
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 export default function StatsScreen() {
@@ -17,7 +18,8 @@ export default function StatsScreen() {
     return (
       <Screen>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#FFF" />
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Calculando estadísticas…</Text>
         </View>
       </Screen>
     );
@@ -29,6 +31,8 @@ export default function StatsScreen() {
       ? 0
       : daysWithHabits.reduce((acc, d) => acc + d.completionRate, 0) /
         daysWithHabits.length;
+
+  const overallPct = Math.round(overallRate * 100);
 
   return (
     <Screen>
@@ -50,12 +54,20 @@ export default function StatsScreen() {
       {/* Resumen global */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Últimos 7 días</Text>
-        <Text style={styles.cardMainValue}>
-          {Math.round(overallRate * 100)}%
-        </Text>
-        <Text style={styles.cardSubtitle}>
-          Promedio de cumplimiento (solo días con hábitos planificados)
-        </Text>
+
+        <View style={styles.bigRow}>
+          <Text style={styles.cardMainValue}>{overallPct}%</Text>
+          <View style={styles.bigRight}>
+            <Text style={styles.bigHint}>Promedio</Text>
+            <Text style={styles.bigSubHint}>
+              (solo días con hábitos planificados)
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.bigBarBackground}>
+          <View style={[styles.bigBarFill, { width: `${overallPct}%` }]} />
+        </View>
       </View>
 
       {/* Lista por día */}
@@ -69,19 +81,18 @@ export default function StatsScreen() {
 
       {days.map((day) => {
         const pct = Math.round(day.completionRate * 100);
-        const width = `${pct}%`;
 
         return (
           <View key={day.date} style={styles.dayRow}>
             <View style={styles.dayHeader}>
               <Text style={styles.dayLabel}>{day.label}</Text>
               <Text style={styles.dayInfo}>
-                {day.totalDone}/{day.totalPlanned} completados ({pct}%)
+                {day.totalDone}/{day.totalPlanned} ({pct}%)
               </Text>
             </View>
 
             <View style={styles.barBackground}>
-              <View style={[styles.barFill, { width }]} />
+              <View style={[styles.barFill, { width: `${pct}%` }]} />
             </View>
           </View>
         );
@@ -91,92 +102,153 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
+  loadingText: { color: colors.mutedText, fontSize: 13 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 14,
     justifyContent: "space-between",
   },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   backIcon: {
-    color: "#E5E7EB",
-    fontSize: 20,
+    color: colors.text,
+    fontSize: 18,
     marginRight: 2,
+    fontWeight: "900",
   },
   backText: {
-    color: "#E5E7EB",
-    fontSize: 14,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "800",
   },
   headerTitle: {
-    color: "#fff",
+    color: colors.text,
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "900",
   },
 
   card: {
     marginTop: 8,
     padding: 16,
-    borderRadius: 16,
-    backgroundColor: "#020617",
+    borderRadius: 18,
+    backgroundColor: "rgba(50,73,86,0.55)",
     borderWidth: 1,
-    borderColor: "#1E293B",
+    borderColor: colors.border,
     marginBottom: 16,
   },
   cardTitle: {
-    color: "#9CA3AF",
+    color: colors.mutedText,
     fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+
+  bigRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginTop: 6,
+    gap: 12,
   },
   cardMainValue: {
-    color: "#F9FAFB",
-    fontSize: 32,
-    fontWeight: "700",
-    marginTop: 4,
+    color: colors.text,
+    fontSize: 40,
+    fontWeight: "900",
   },
-  cardSubtitle: {
-    color: "#9CA3AF",
+  bigRight: {
+    flex: 1,
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+  },
+  bigHint: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  bigSubHint: {
+    color: "rgba(241,233,215,0.70)",
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 2,
+    textAlign: "right",
+    fontWeight: "700",
   },
+
+  bigBarBackground: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(43,62,74,0.35)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    marginTop: 12,
+  },
+  bigBarFill: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+
   sectionTitle: {
-    color: "#CBD5F5",
+    color: colors.mutedText,
     fontSize: 13,
     marginBottom: 8,
+    fontWeight: "900",
+    letterSpacing: 0.2,
   },
   empty: {
-    color: "#9CA3AF",
+    color: colors.mutedText,
     fontSize: 12,
+    lineHeight: 16,
   },
+
   dayRow: {
-    marginBottom: 10,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   dayHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 4,
+    marginBottom: 6,
+    gap: 10,
   },
   dayLabel: {
-    color: "#E5E7EB",
+    color: colors.text,
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "900",
   },
   dayInfo: {
-    color: "#9CA3AF",
+    color: colors.mutedText,
     fontSize: 11,
+    fontWeight: "800",
   },
+
   barBackground: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#1E293B",
+    backgroundColor: "rgba(43,62,74,0.35)",
+    borderWidth: 1,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   barFill: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: "#38BDF8",
+    backgroundColor: colors.success,
   },
 });
