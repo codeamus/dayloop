@@ -1,26 +1,26 @@
 // app/(tabs)/_layout.tsx
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { router, Tabs, usePathname } from "expo-router";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const router = useRouter();
 
   const extraBottom =
     Platform.OS === "android" ? insets.bottom || 8 : insets.bottom;
+
   const isHabitModalOpen = pathname === "/habit-new";
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: "rgba(241,233,215,0.65)",
-
         tabBarStyle: [
           {
             backgroundColor: colors.surface,
@@ -33,19 +33,13 @@ export default function TabsLayout() {
           },
           isHabitModalOpen && { display: "none" },
         ],
-
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "700",
         },
-
-        // Esto ayuda a que no se vea “cuadrado” el tab bar en iOS
-        tabBarItemStyle: {
-          paddingVertical: 2,
-        },
+        tabBarItemStyle: { paddingVertical: 2 },
       }}
     >
-      {/* HOME */}
       <Tabs.Screen
         name="index"
         options={{
@@ -56,8 +50,6 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* MY HABITS */}
-
       <Tabs.Screen
         name="habits"
         options={{
@@ -66,15 +58,8 @@ export default function TabsLayout() {
             <Ionicons name="checkmark-done-outline" size={size} color={color} />
           ),
         }}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault(); // ✅ evitamos el comportamiento default
-            router.replace("/habits"); // ✅ siempre lista
-          },
-        }}
       />
 
-      {/* MY STATS */}
       <Tabs.Screen
         name="stats"
         options={{
@@ -85,7 +70,6 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* ACCOUNT / SETTINGS */}
       <Tabs.Screen
         name="settings"
         options={{

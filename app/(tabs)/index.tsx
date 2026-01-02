@@ -209,7 +209,7 @@ export default function TodayScreen() {
     if (navLockRef.current) return;
     navLockRef.current = true;
 
-    router.push(`/habits/${habitId}`);
+    router.push(`/(tabs)/habits/${habitId}`);
 
     setTimeout(() => {
       navLockRef.current = false;
