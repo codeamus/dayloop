@@ -7,4 +7,9 @@ export interface HabitRepository {
   create(habit: Habit): Promise<void>;
   update(habit: Habit): Promise<void>;
   delete(id: HabitId): Promise<void>;
+  // ✅ necesario para poder cancelar notificaciones al borrar
+  getById(id: HabitId): Promise<Habit | null>;
+
+  // ✅ NUEVO: persistir ids de notificaciones (JSON en SQLite)
+  updateNotifications(id: HabitId, notificationIds: string[]): Promise<void>;
 }

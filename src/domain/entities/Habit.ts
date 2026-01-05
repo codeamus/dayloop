@@ -49,4 +49,5 @@ export type Habit = {
 
   // 🔔 Notificaciones
   reminderOffsetMinutes?: number | null;
+  notificationIds?: string[];
 };

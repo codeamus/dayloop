@@ -2,7 +2,7 @@ import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4; // 👈 era 3
 
 export function initDatabase() {
   db.execSync(`
@@ -26,7 +26,10 @@ export function initDatabase() {
       end_time TEXT,
       calendar_event_id TEXT,
 
-      reminder_offset_minutes INTEGER
+      reminder_offset_minutes INTEGER,
+
+      -- ✅ NUEVO: IDs de notificaciones programadas
+      notification_ids TEXT
     );
 
     CREATE TABLE IF NOT EXISTS habit_logs (
@@ -54,13 +57,9 @@ function migrateIfNeeded() {
   db.execSync(`BEGIN TRANSACTION;`);
 
   try {
-    if (user_version < 2) {
-      migrateToV2();
-    }
-
-    if (user_version < 3) {
-      migrateToV3();
-    }
+    if (user_version < 2) migrateToV2();
+    if (user_version < 3) migrateToV3();
+    if (user_version < 4) migrateToV4(); // ✅ nuevo
 
     db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     db.execSync(`COMMIT;`);
@@ -72,21 +71,19 @@ function migrateIfNeeded() {
 }
 
 // ==========================
-// MIGRACIÓN V2 (ya la tenías)
+// MIGRACIÓN V2
 // ==========================
 function migrateToV2() {
   safeAddColumn("habits", "start_time", "TEXT");
   safeAddColumn("habits", "end_time", "TEXT");
   safeAddColumn("habits", "calendar_event_id", "TEXT");
 
-  // Poblar start_time desde time (legacy)
   db.execSync(`
     UPDATE habits
     SET start_time = time
     WHERE start_time IS NULL AND time IS NOT NULL;
   `);
 
-  // end_time = start_time + 30 min (solo si start_time tiene formato HH:mm válido)
   db.execSync(`
     UPDATE habits
     SET end_time =
@@ -102,14 +99,12 @@ function migrateToV2() {
       AND start_time GLOB '[0-2][0-9]:[0-5][0-9]';
   `);
 
-  // fallback final (si por cualquier razón no quedó start_time)
   db.execSync(`
     UPDATE habits
     SET start_time = '08:00', end_time = '08:30'
     WHERE start_time IS NULL;
   `);
 
-  // fallback adicional: si quedó end_time null
   db.execSync(`
     UPDATE habits
     SET end_time = '08:30'
@@ -118,19 +113,15 @@ function migrateToV2() {
 }
 
 // ==========================
-// MIGRACIÓN V3 (mensual + normalización segura)
+// MIGRACIÓN V3
 // ==========================
 function migrateToV3() {
-  // 1) Normaliza schedule_type
-  // Si por alguna razón existe null/vacío -> daily
   db.execSync(`
     UPDATE habits
     SET schedule_type = 'daily'
     WHERE schedule_type IS NULL OR trim(schedule_type) = '';
   `);
 
-  // 2) Normaliza schedule_days para weekly/monthly
-  // Evita JSON.parse crash si viene null y el tipo requiere array
   db.execSync(`
     UPDATE habits
     SET schedule_days = '[]'
@@ -138,12 +129,24 @@ function migrateToV3() {
       AND (schedule_days IS NULL OR trim(schedule_days) = '');
   `);
 
-  // 3) Normaliza end_condition (si quieres)
-  // Si viene null -> {"type":"none"} (tu repo ya hace fallback, esto es opcional)
   db.execSync(`
     UPDATE habits
     SET end_condition = '{"type":"none"}'
     WHERE end_condition IS NULL OR trim(end_condition) = '';
+  `);
+}
+
+// ==========================
+// ✅ MIGRACIÓN V4 (notificaciones)
+// ==========================
+function migrateToV4() {
+  safeAddColumn("habits", "notification_ids", "TEXT");
+
+  // normaliza a [] si es null
+  db.execSync(`
+    UPDATE habits
+    SET notification_ids = '[]'
+    WHERE notification_ids IS NULL OR trim(notification_ids) = '';
   `);
 }
 
@@ -154,6 +157,6 @@ function safeAddColumn(table: string, column: string, type: string) {
   try {
     db.execSync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
   } catch {
-    // ya existe → ignoramos
+    // ya existe
   }
 }

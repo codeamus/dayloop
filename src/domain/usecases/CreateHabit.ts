@@ -1,6 +1,9 @@
-// src/domain/usecases/CreateHabit.ts
-import type { Habit, HabitSchedule, TimeOfDay } from "@/domain/entities/Habit";
+import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import type { HabitRepository } from "@/domain/repositories/HabitRepository";
+import type {
+  HabitNotificationPlan,
+  NotificationScheduler,
+} from "@/domain/services/NotificationScheduler";
 
 function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
@@ -57,22 +60,22 @@ function getDayOfMonthFromLocalDate(date: unknown): number {
 }
 
 export class CreateHabit {
-  constructor(private habitRepository: HabitRepository) {}
+  constructor(
+    private habitRepository: HabitRepository,
+    private notificationScheduler: NotificationScheduler
+  ) {}
 
   async execute(input: {
     name: string;
     icon: string;
     color: string;
     type: "daily" | "weekly" | "monthly";
-
     startTime?: unknown;
     endTime?: unknown;
-
-    weeklyDays?: unknown; // number[] 0..6
-    monthDays?: unknown; // number[] 1..31
-
-    reminderOffsetMinutes?: unknown; // number|null
-    date?: unknown; // opcional, por si un día lo usas
+    weeklyDays?: unknown;
+    monthDays?: unknown;
+    reminderOffsetMinutes?: unknown;
+    date?: unknown;
   }): Promise<{ ok: true; habit: Habit } | { ok: false }> {
     try {
       const name = safeString(input.name, "").trim();
@@ -83,7 +86,6 @@ export class CreateHabit {
 
       const startTime = safeHHmm(input.startTime, "08:00");
       const endTime = safeHHmm(input.endTime, "08:30");
-
       const timeOfDay = getTimeOfDayFromHour(startTime);
 
       const reminderOffsetMinutes =
@@ -92,7 +94,6 @@ export class CreateHabit {
           ? null
           : Number(input.reminderOffsetMinutes);
 
-      // ✅ schedule
       const type = input.type ?? "daily";
 
       let schedule: HabitSchedule;
@@ -101,8 +102,6 @@ export class CreateHabit {
         const days = uniqueSortedNumbers(input.weeklyDays).filter(
           (d) => d >= 0 && d <= 6
         );
-
-        // fallback seguro: si viene vacío, usamos día actual
         const fallbackDay = getDayOfWeekFromLocalDate(input.date);
         schedule = {
           type: "weekly",
@@ -112,8 +111,6 @@ export class CreateHabit {
         const days = uniqueSortedNumbers(input.monthDays).filter(
           (d) => d >= 1 && d <= 31
         );
-
-        // fallback seguro: si viene vacío, usamos día del mes actual
         const fallbackDay = getDayOfMonthFromLocalDate(input.date);
         schedule = {
           type: "monthly",
@@ -123,35 +120,46 @@ export class CreateHabit {
         schedule = { type: "daily" };
       }
 
+      const habitId = crypto.randomUUID();
+
       const habit: Habit = {
-        id: crypto.randomUUID(),
+        id: habitId,
         name,
         icon,
         color,
         schedule,
-
-        // bloque horario
         startTime,
         endTime,
-
-        // legacy
         time: startTime,
-
         timeOfDay,
-
-        // notifs
         reminderOffsetMinutes: Number.isFinite(reminderOffsetMinutes as number)
           ? (reminderOffsetMinutes as number)
           : null,
-
-        // calendar
         calendarEventId: null,
-
-        // endCondition (si ya lo tienes en la entidad)
         endCondition: { type: "none" },
+
+        // 👇 nuevo
+        notificationIds: [],
       } as any;
 
+      // 1) guardar primero (opcional, pero práctico)
       await this.habitRepository.create(habit);
+
+      // 2) programar notificaciones
+      const plan: HabitNotificationPlan = {
+        habitId,
+        name,
+        icon,
+        startTime,
+        schedule: schedule as any,
+        reminderOffsetMinutes: habit.reminderOffsetMinutes ?? null,
+      };
+
+      const ids = await this.notificationScheduler.scheduleForHabit(plan);
+
+      // 3) persistir ids
+      habit.notificationIds = ids;
+      await this.habitRepository.updateNotifications(habitId, ids);
 
       return { ok: true, habit };
     } catch (e) {

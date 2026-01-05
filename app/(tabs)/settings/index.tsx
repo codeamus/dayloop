@@ -7,10 +7,12 @@ import {
 } from "@/core/settings/reminderSettings";
 import { Screen } from "@/presentation/components/Screen";
 import { colors } from "@/theme/colors";
+import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   StyleSheet,
   Switch,
@@ -32,6 +34,7 @@ const PRESETS: Record<
 export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
+  const [devBusy, setDevBusy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -64,6 +67,40 @@ export default function SettingsScreen() {
       Object.entries(PRESETS) as [PresetKey, { hour: number; minute: number }][]
     ).find(([, v]) => v.hour === settings.hour && v.minute === settings.minute);
     return match?.[0] ?? null;
+  }
+
+  async function devCancelAllScheduledNotifications() {
+    try {
+      setDevBusy(true);
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      Alert.alert(
+        "DEV",
+        "Listo: se cancelaron todas las notificaciones programadas."
+      );
+    } catch (e) {
+      console.error("[DEV] cancelAllScheduledNotifications failed", e);
+      Alert.alert(
+        "DEV",
+        "No se pudieron cancelar las notificaciones. Revisa consola/logs."
+      );
+    } finally {
+      setDevBusy(false);
+    }
+  }
+
+  function onPressDevCancelAll() {
+    Alert.alert(
+      "Cancelar notificaciones (DEV)",
+      "Esto borrará TODAS las notificaciones programadas en este dispositivo para la app.\n\nÚsalo solo para limpiar notificaciones fantasma.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Sí, cancelar",
+          style: "destructive",
+          onPress: devCancelAllScheduledNotifications,
+        },
+      ]
+    );
   }
 
   if (loading || !settings) {
@@ -170,6 +207,34 @@ export default function SettingsScreen() {
               </Text>
             </Text>
           </View>
+        )}
+
+        {/* ✅ DEV TOOLS */}
+        {__DEV__ && (
+          <>
+            <View style={styles.divider} />
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionLabel}>Herramientas (DEV)</Text>
+              <Text style={styles.sectionHint}>Solo desarrollo</Text>
+            </View>
+
+            <Pressable
+              style={[styles.devButton, devBusy && { opacity: 0.6 }]}
+              onPress={onPressDevCancelAll}
+              disabled={devBusy}
+            >
+              <Text style={styles.devButtonText}>
+                {devBusy
+                  ? "Cancelando…"
+                  : "DEV: Cancelar todas las notificaciones"}
+              </Text>
+            </Pressable>
+
+            <Text style={styles.devHint}>
+              Úsalo para limpiar notificaciones fantasma tras borrar hábitos.
+            </Text>
+          </>
         )}
       </View>
     </Screen>
@@ -313,5 +378,27 @@ const styles = StyleSheet.create({
   infoTextStrong: {
     color: colors.text,
     fontWeight: "900",
+  },
+
+  // DEV
+  devButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255, 99, 71, 0.45)",
+    backgroundColor: "rgba(255, 99, 71, 0.10)",
+  },
+  devButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    textAlign: "center",
+    fontWeight: "900",
+  },
+  devHint: {
+    marginTop: 8,
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
   },
 });
