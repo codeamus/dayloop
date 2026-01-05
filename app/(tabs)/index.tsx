@@ -1,5 +1,6 @@
 // app/(tabs)/index.tsx
 import { Screen } from "@/presentation/components/Screen";
+import { useNotificationPermission } from "@/presentation/hooks/useNotificationPermission";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
@@ -43,6 +44,10 @@ export default function TodayScreen() {
 
   const [frequencyTab, setFrequencyTab] = useState<FrequencyTab>("daily");
   const [timeTab, setTimeTab] = useState<TimeTab>("all");
+
+  const { status, isGranted, request } = useNotificationPermission();
+
+  const shouldShowNotificationPrompt = !isGranted && habits.length > 0;
 
   const filtered = useMemo(() => {
     // 1) Filtrar por frecuencia + timeOfDay
@@ -95,6 +100,21 @@ export default function TodayScreen() {
           <Text style={styles.headerCtaText}>+ Nuevo</Text>
         </Pressable>
       </View>
+
+      {shouldShowNotificationPrompt && (
+        <View style={styles.notificationBanner}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.notificationTitle}>Activa recordatorios</Text>
+            <Text style={styles.notificationText}>
+              Dayloop usa notificaciones para ayudarte a mantener tus hábitos.
+            </Text>
+          </View>
+
+          <Pressable onPress={request} style={styles.notificationButton}>
+            <Text style={styles.notificationButtonText}>Activar</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Fila 1 */}
       <View style={styles.topTabs}>
@@ -428,4 +448,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   createText: { color: colors.bg, fontSize: 15, fontWeight: "900" },
+  notificationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(230,188,1,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.35)",
+  },
+  notificationTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  notificationText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  notificationButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+  notificationButtonText: {
+    color: colors.bg,
+    fontSize: 13,
+    fontWeight: "900",
+  },
 });
