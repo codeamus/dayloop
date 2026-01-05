@@ -11,12 +11,13 @@ import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -37,6 +38,7 @@ const COLOR_PRESETS = ["#e6bc01", "#8ecd6e", "#f1e9d7", "#2b3e4a", "#ef4444"];
 const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
 
 type PickerTarget = "start" | "end";
+type ScheduleType = HabitSchedule["type"]; // daily | weekly | monthly
 
 function hhmmToMinutes(hhmm: string): number {
   const [hStr, mStr] = hhmm.split(":");
@@ -63,6 +65,10 @@ function buildDateForTime(hhmm: string): Date {
   return d;
 }
 
+function uniqueSortedNumbers(xs: number[]) {
+  return Array.from(new Set(xs)).sort((a, b) => a - b);
+}
+
 export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const habitId = Array.isArray(id) ? id[0] : id;
@@ -71,13 +77,15 @@ export default function EditHabitScreen() {
   const { habit, loading } = useHabit(habitId);
 
   const [name, setName] = useState("");
-  const [scheduleType, setScheduleType] =
-    useState<HabitSchedule["type"]>("daily");
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [scheduleType, setScheduleType] = useState<ScheduleType>("daily");
+
+  const [selectedWeekDays, setSelectedWeekDays] = useState<number[]>([]);
+  const [selectedMonthDays, setSelectedMonthDays] = useState<number[]>([]);
+
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
 
-  // ✅ Bloque horario
+  // bloque horario
   const [startTime, setStartTime] = useState<string>("08:00");
   const [endTime, setEndTime] = useState<string>("08:30");
 
@@ -89,26 +97,40 @@ export default function EditHabitScreen() {
   );
 
   useEffect(() => {
-    if (!id) return;
-    void container.getHabitStreaks.execute(id.toString()).catch(() => null);
-  }, [id]);
+    if (!habitId) return;
+    void container.getHabitStreaks.execute(habitId).catch(() => null);
+  }, [habitId]);
 
-  // ✅ Inicialización correcta con side-effects: useEffect (NO useMemo)
   useEffect(() => {
     if (!habit) return;
 
     setName(habit.name);
-
-    if (habit.schedule.type === "daily") {
-      setScheduleType("daily");
-      setSelectedDays([]);
-    } else {
-      setScheduleType("weekly");
-      setSelectedDays(habit.schedule.daysOfWeek);
-    }
-
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || ICON_PRESETS[0]);
+
+    // schedule init
+    if (habit.schedule.type === "daily") {
+      setScheduleType("daily");
+      setSelectedWeekDays([]);
+      setSelectedMonthDays([]);
+    } else if (habit.schedule.type === "weekly") {
+      setScheduleType("weekly");
+      setSelectedWeekDays(
+        Array.isArray(habit.schedule.daysOfWeek)
+          ? habit.schedule.daysOfWeek
+          : []
+      );
+      setSelectedMonthDays([]);
+    } else {
+      // monthly
+      setScheduleType("monthly");
+      setSelectedMonthDays(
+        Array.isArray((habit.schedule as any).daysOfMonth)
+          ? (habit.schedule as any).daysOfMonth
+          : []
+      );
+      setSelectedWeekDays([]);
+    }
 
     const s = habit.startTime ?? habit.time ?? "08:00";
     const e = habit.endTime ?? addMinutesHHmm(s, 30);
@@ -117,10 +139,21 @@ export default function EditHabitScreen() {
   }, [habit]);
 
   function toggleWeekDay(day: number) {
-    setSelectedDays((prev) =>
+    setSelectedWeekDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
     );
   }
+
+  function toggleMonthDay(day: number) {
+    setSelectedMonthDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+  }
+
+  const monthDays = useMemo(
+    () => Array.from({ length: 31 }, (_, i) => i + 1),
+    []
+  );
 
   const openPickerFor = useCallback(
     (target: PickerTarget) => {
@@ -146,18 +179,12 @@ export default function EditHabitScreen() {
 
       if (pickerTarget === "start") {
         setStartTime(picked);
-
-        // Si end queda inválido => start + 30
         const startMin = hhmmToMinutes(picked);
         const endMin = hhmmToMinutes(endTime);
-        if (endMin <= startMin) {
-          setEndTime(minutesToHHmm(startMin + 30));
-        }
+        if (endMin <= startMin) setEndTime(minutesToHHmm(startMin + 30));
       } else {
-        // end
         const startMin = hhmmToMinutes(startTime);
         const endMin = hhmmToMinutes(picked);
-
         if (endMin <= startMin) {
           Alert.alert(
             "Horario inválido",
@@ -169,7 +196,6 @@ export default function EditHabitScreen() {
       }
 
       setPickerDate(d);
-
       if (Platform.OS === "android") setShowTimePicker(false);
     },
     [pickerDate, pickerTarget, startTime, endTime]
@@ -184,21 +210,6 @@ export default function EditHabitScreen() {
       return;
     }
 
-    let schedule: HabitSchedule;
-
-    if (scheduleType === "daily") {
-      schedule = { type: "daily", daysOfWeek: [0, 1, 2, 3, 4, 5, 6] };
-    } else {
-      if (selectedDays.length === 0) {
-        Alert.alert(
-          "Selecciona días",
-          "Para un hábito semanal debes elegir al menos un día."
-        );
-        return;
-      }
-      schedule = { type: "weekly", daysOfWeek: [...selectedDays].sort() };
-    }
-
     const startMin = hhmmToMinutes(startTime);
     const endMin = hhmmToMinutes(endTime);
     if (endMin <= startMin) {
@@ -209,6 +220,37 @@ export default function EditHabitScreen() {
       return;
     }
 
+    let schedule: HabitSchedule;
+
+    if (scheduleType === "daily") {
+      schedule = { type: "daily" };
+    } else if (scheduleType === "weekly") {
+      const days = uniqueSortedNumbers(selectedWeekDays).filter(
+        (d) => d >= 0 && d <= 6
+      );
+      if (days.length === 0) {
+        Alert.alert(
+          "Selecciona días",
+          "Para un hábito semanal debes elegir al menos un día."
+        );
+        return;
+      }
+      schedule = { type: "weekly", daysOfWeek: days };
+    } else {
+      // monthly
+      const days = uniqueSortedNumbers(selectedMonthDays).filter(
+        (d) => d >= 1 && d <= 31
+      );
+      if (days.length === 0) {
+        Alert.alert(
+          "Selecciona días",
+          "Para un hábito mensual debes elegir al menos un día del mes."
+        );
+        return;
+      }
+      schedule = { type: "monthly", daysOfMonth: days } as any;
+    }
+
     const timeOfDay = getTimeOfDayFromHour(startTime);
 
     const updated: Habit = {
@@ -217,14 +259,9 @@ export default function EditHabitScreen() {
       schedule,
       color,
       icon,
-
-      // ✅ nuevo
       startTime,
       endTime,
-
-      // ⚠️ legacy (compat)
       time: startTime,
-
       timeOfDay,
     };
 
@@ -265,233 +302,284 @@ export default function EditHabitScreen() {
 
   return (
     <Screen>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backButton}
-          hitSlop={10}
-        >
-          <Text style={styles.backIcon}>‹</Text>
-          <Text style={styles.backText}>Volver</Text>
-        </Pressable>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
+        {/* HEADER */}
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.backButton}
+            hitSlop={10}
+          >
+            <Text style={styles.backIcon}>‹</Text>
+            <Text style={styles.backText}>Volver</Text>
+          </Pressable>
 
-        <Text style={styles.headerTitle}>Editar hábito</Text>
+          <Text style={styles.headerTitle}>Editar hábito</Text>
 
-        <Pressable
-          onPress={handleDelete}
-          style={styles.deleteButton}
-          hitSlop={10}
-        >
-          <Text style={styles.deleteButtonText}>Eliminar</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={handleDelete}
+            style={styles.deleteButton}
+            hitSlop={10}
+          >
+            <Text style={styles.deleteButtonText}>Eliminar</Text>
+          </Pressable>
+        </View>
 
-      {/* Rachas */}
-      {!!streak && (
-        <View style={styles.streakCard}>
-          <View style={styles.streakHeader}>
-            <Text style={styles.streakTitle}>Rachas</Text>
-            <View style={styles.streakPill}>
-              <Text style={styles.streakPillText}>
-                {streak.currentDailyStreak} 🔥
+        {/* Rachas */}
+        {!!streak && (
+          <View style={styles.streakCard}>
+            <View style={styles.streakHeader}>
+              <Text style={styles.streakTitle}>Rachas</Text>
+              <View style={styles.streakPill}>
+                <Text style={styles.streakPillText}>
+                  {streak.currentDailyStreak} 🔥
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.streakRow}>
+              <Text style={styles.streakLabel}>Racha diaria actual</Text>
+              <Text style={styles.streakValue}>
+                {streak.currentDailyStreak} días
               </Text>
             </View>
+
+            <View style={styles.streakRow}>
+              <Text style={styles.streakLabel}>Mejor racha diaria</Text>
+              <Text style={styles.streakValue}>
+                {streak.bestDailyStreak} días
+              </Text>
+            </View>
+
+            {streak.bestWeeklyStreak > 0 && (
+              <>
+                <View style={styles.streakRow}>
+                  <Text style={styles.streakLabel}>Racha semanal actual</Text>
+                  <Text style={styles.streakValue}>
+                    {streak.currentWeeklyStreak} semanas
+                  </Text>
+                </View>
+
+                <View style={styles.streakRow}>
+                  <Text style={styles.streakLabel}>Mejor racha semanal</Text>
+                  <Text style={styles.streakValue}>
+                    {streak.bestWeeklyStreak} semanas
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
+        )}
 
-          <View style={styles.streakRow}>
-            <Text style={styles.streakLabel}>Racha diaria actual</Text>
-            <Text style={styles.streakValue}>
-              {streak.currentDailyStreak} días
-            </Text>
-          </View>
+        {/* Nombre */}
+        <Text style={styles.label}>Nombre</Text>
+        <TextInput
+          placeholder="Ej: Leer 10 minutos"
+          placeholderTextColor={colors.mutedText}
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+        />
 
-          <View style={styles.streakRow}>
-            <Text style={styles.streakLabel}>Mejor racha diaria</Text>
-            <Text style={styles.streakValue}>
-              {streak.bestDailyStreak} días
-            </Text>
-          </View>
-
-          {streak.bestWeeklyStreak > 0 && (
-            <>
-              <View style={styles.streakRow}>
-                <Text style={styles.streakLabel}>Racha semanal actual</Text>
-                <Text style={styles.streakValue}>
-                  {streak.currentWeeklyStreak} semanas
-                </Text>
-              </View>
-
-              <View style={styles.streakRow}>
-                <Text style={styles.streakLabel}>Mejor racha semanal</Text>
-                <Text style={styles.streakValue}>
-                  {streak.bestWeeklyStreak} semanas
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
-      )}
-
-      {/* Nombre */}
-      <Text style={styles.label}>Nombre</Text>
-      <TextInput
-        placeholder="Ej: Leer 10 minutos"
-        placeholderTextColor={colors.mutedText}
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-      />
-
-      {/* Color */}
-      <Text style={styles.label}>Color</Text>
-      <View style={styles.colorsRow}>
-        {COLOR_PRESETS.map((c) => {
-          const active = c === color;
-          return (
-            <Pressable
-              key={c}
-              onPress={() => setColor(c)}
-              style={[
-                styles.colorDotWrapper,
-                active && styles.colorDotWrapperActive,
-              ]}
-            >
-              <View style={[styles.colorDot, { backgroundColor: c }]} />
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Ícono */}
-      <Text style={styles.label}>Ícono</Text>
-      <View style={styles.iconsRow}>
-        {ICON_PRESETS.map((i) => {
-          const active = i === icon;
-          return (
-            <Pressable
-              key={i}
-              onPress={() => setIcon(i)}
-              style={[styles.iconChip, active && styles.iconChipActive]}
-            >
-              <Text style={styles.iconChipText}>{i}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Frecuencia */}
-      <Text style={styles.label}>Frecuencia</Text>
-      <View style={styles.segmentContainer}>
-        <Pressable
-          onPress={() => setScheduleType("daily")}
-          style={[
-            styles.segment,
-            scheduleType === "daily" && styles.segmentActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              scheduleType === "daily" && styles.segmentTextActive,
-            ]}
-          >
-            Diario
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setScheduleType("weekly")}
-          style={[
-            styles.segment,
-            scheduleType === "weekly" && styles.segmentActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              scheduleType === "weekly" && styles.segmentTextActive,
-            ]}
-          >
-            Semanal
-          </Text>
-        </Pressable>
-      </View>
-
-      {scheduleType === "weekly" && (
-        <View style={styles.weekDaysContainer}>
-          {WEEK_DAYS.map((day) => {
-            const active = selectedDays.includes(day.value);
+        {/* Color */}
+        <Text style={styles.label}>Color</Text>
+        <View style={styles.colorsRow}>
+          {COLOR_PRESETS.map((c) => {
+            const active = c === color;
             return (
               <Pressable
-                key={day.value}
-                onPress={() => toggleWeekDay(day.value)}
-                style={[styles.dayChip, active && styles.dayChipActive]}
+                key={c}
+                onPress={() => setColor(c)}
+                style={[
+                  styles.colorDotWrapper,
+                  active && styles.colorDotWrapperActive,
+                ]}
               >
-                <Text
-                  style={[
-                    styles.dayChipText,
-                    active && styles.dayChipTextActive,
-                  ]}
-                >
-                  {day.label}
-                </Text>
+                <View style={[styles.colorDot, { backgroundColor: c }]} />
               </Pressable>
             );
           })}
         </View>
-      )}
 
-      {/* Horario */}
-      <Text style={styles.label}>Horario</Text>
-
-      <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
-        <Pressable
-          style={styles.timeButton}
-          onPress={() => openPickerFor("start")}
-        >
-          <Text style={styles.timeButtonText}>{startTime}</Text>
-          <View style={styles.timePill}>
-            <Text style={styles.timePillText}>Inicio</Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={styles.timeButton}
-          onPress={() => openPickerFor("end")}
-        >
-          <Text style={styles.timeButtonText}>{endTime}</Text>
-          <View style={styles.timePill}>
-            <Text style={styles.timePillText}>Fin</Text>
-          </View>
-        </Pressable>
-      </View>
-
-      {showTimePicker && (
-        <View style={styles.timePickerContainer}>
-          <DateTimePicker
-            value={pickerDate}
-            mode="time"
-            is24Hour
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={handleTimeChange}
-            themeVariant="dark"
-          />
-
-          {Platform.OS === "ios" && (
-            <Pressable
-              style={styles.timeDoneButton}
-              onPress={() => setShowTimePicker(false)}
-            >
-              <Text style={styles.timeDoneText}>Listo</Text>
-            </Pressable>
-          )}
+        {/* Ícono */}
+        <Text style={styles.label}>Ícono</Text>
+        <View style={styles.iconsRow}>
+          {ICON_PRESETS.map((i) => {
+            const active = i === icon;
+            return (
+              <Pressable
+                key={i}
+                onPress={() => setIcon(i)}
+                style={[styles.iconChip, active && styles.iconChipActive]}
+              >
+                <Text style={styles.iconChipText}>{i}</Text>
+              </Pressable>
+            );
+          })}
         </View>
-      )}
 
-      <Pressable onPress={handleSave} style={styles.btn}>
-        <Text style={styles.btnText}>Guardar cambios</Text>
-      </Pressable>
+        {/* Frecuencia */}
+        <Text style={styles.label}>Frecuencia</Text>
+        <View style={styles.segmentContainer}>
+          <Pressable
+            onPress={() => setScheduleType("daily")}
+            style={[
+              styles.segment,
+              scheduleType === "daily" && styles.segmentActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                scheduleType === "daily" && styles.segmentTextActive,
+              ]}
+            >
+              Diario
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setScheduleType("weekly")}
+            style={[
+              styles.segment,
+              scheduleType === "weekly" && styles.segmentActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                scheduleType === "weekly" && styles.segmentTextActive,
+              ]}
+            >
+              Semanal
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setScheduleType("monthly")}
+            style={[
+              styles.segment,
+              scheduleType === "monthly" && styles.segmentActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.segmentText,
+                scheduleType === "monthly" && styles.segmentTextActive,
+              ]}
+            >
+              Mensual
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Selector semanal */}
+        {scheduleType === "weekly" && (
+          <View style={styles.weekDaysContainer}>
+            {WEEK_DAYS.map((day) => {
+              const active = selectedWeekDays.includes(day.value);
+              return (
+                <Pressable
+                  key={day.value}
+                  onPress={() => toggleWeekDay(day.value)}
+                  style={[styles.dayChip, active && styles.dayChipActive]}
+                >
+                  <Text
+                    style={[
+                      styles.dayChipText,
+                      active && styles.dayChipTextActive,
+                    ]}
+                  >
+                    {day.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Selector mensual */}
+        {scheduleType === "monthly" && (
+          <View style={styles.monthContainer}>
+            <Text style={styles.monthHint}>Selecciona días del mes (1–31)</Text>
+            <View style={styles.monthGrid}>
+              {monthDays.map((d) => {
+                const active = selectedMonthDays.includes(d);
+                return (
+                  <Pressable
+                    key={d}
+                    onPress={() => toggleMonthDay(d)}
+                    style={[styles.monthChip, active && styles.monthChipActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.monthChipText,
+                        active && styles.monthChipTextActive,
+                      ]}
+                    >
+                      {d}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Horario */}
+        <Text style={styles.label}>Horario</Text>
+
+        <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+          <Pressable
+            style={styles.timeButton}
+            onPress={() => openPickerFor("start")}
+          >
+            <Text style={styles.timeButtonText}>{startTime}</Text>
+            <View style={styles.timePill}>
+              <Text style={styles.timePillText}>Inicio</Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={styles.timeButton}
+            onPress={() => openPickerFor("end")}
+          >
+            <Text style={styles.timeButtonText}>{endTime}</Text>
+            <View style={styles.timePill}>
+              <Text style={styles.timePillText}>Fin</Text>
+            </View>
+          </Pressable>
+        </View>
+
+        {showTimePicker && (
+          <View style={styles.timePickerContainer}>
+            <DateTimePicker
+              value={pickerDate}
+              mode="time"
+              is24Hour
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={handleTimeChange}
+              themeVariant="dark"
+            />
+
+            {Platform.OS === "ios" && (
+              <Pressable
+                style={styles.timeDoneButton}
+                onPress={() => setShowTimePicker(false)}
+              >
+                <Text style={styles.timeDoneText}>Listo</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        <Pressable onPress={handleSave} style={styles.btn}>
+          <Text style={styles.btnText}>Guardar cambios</Text>
+        </Pressable>
+      </ScrollView>
     </Screen>
   );
 }
@@ -560,7 +648,6 @@ const styles = StyleSheet.create({
     borderColor: "rgba(230,188,1,0.45)",
   },
   streakPillText: { color: colors.primary, fontWeight: "900", fontSize: 12 },
-
   streakRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -634,6 +721,31 @@ const styles = StyleSheet.create({
   dayChipText: { color: colors.mutedText, fontWeight: "900" },
   dayChipTextActive: { color: colors.success, fontWeight: "900" },
 
+  monthContainer: { marginTop: 10 },
+  monthHint: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  monthGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  monthChip: {
+    width: 44,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(43,62,74,0.20)",
+  },
+  monthChipActive: {
+    backgroundColor: "rgba(230,188,1,0.18)",
+    borderColor: "rgba(230,188,1,0.55)",
+  },
+  monthChipText: { color: colors.mutedText, fontWeight: "900" },
+  monthChipTextActive: { color: colors.primary, fontWeight: "900" },
+
   colorsRow: { flexDirection: "row", gap: 10, alignItems: "center" },
   colorDotWrapper: {
     width: 34,
@@ -705,11 +817,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(241,233,215,0.18)",
     backgroundColor: "rgba(241,233,215,0.08)",
   },
-  timeDoneText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: "900",
-  },
+  timeDoneText: { fontSize: 13, color: colors.text, fontWeight: "900" },
 
   btn: {
     backgroundColor: colors.primary,

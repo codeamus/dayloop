@@ -1,22 +1,59 @@
 // src/domain/usecases/CreateHabit.ts
-import type { Habit } from "@/domain/entities/Habit";
+import type { Habit, HabitSchedule, TimeOfDay } from "@/domain/entities/Habit";
 import type { HabitRepository } from "@/domain/repositories/HabitRepository";
-import { randomUUID } from "expo-crypto";
 
-function addMinutesHHmm(time: string, add: number) {
-  const [hStr, mStr] = time.split(":");
-  const h = Number(hStr) || 0;
-  const m = Number(mStr) || 0;
-
-  const total = (h * 60 + m + add) % (24 * 60);
-  const hh = String(Math.floor(total / 60)).padStart(2, "0");
-  const mm = String(total % 60).padStart(2, "0");
-  return `${hh}:${mm}`;
+function safeString(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
 }
 
-function isHHmm(v: string) {
-  // "00:00" a "23:59"
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+function safeHHmm(v: unknown, fallback: string): string {
+  const s = safeString(v, fallback);
+  return /^\d{2}:\d{2}$/.test(s) ? s : fallback;
+}
+
+function uniqueSortedNumbers(xs: unknown): number[] {
+  if (!Array.isArray(xs)) return [];
+  const nums = xs
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n))
+    .map((n) => Math.trunc(n));
+  return Array.from(new Set(nums)).sort((a, b) => a - b);
+}
+
+function getTimeOfDayFromHour(startTime: unknown): TimeOfDay {
+  if (typeof startTime !== "string") return "morning";
+  const hPart = startTime.split(":")[0];
+  const h = Number(hPart);
+  if (!Number.isFinite(h)) return "morning";
+  if (h < 12) return "morning";
+  if (h < 18) return "afternoon";
+  return "evening";
+}
+
+function todayISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function getDayOfWeekFromLocalDate(date: unknown): number {
+  // ultra-safe (nada de undefined.split)
+  const s = safeString(date, todayISO());
+  const [yy, mm, dd] = s.split("-").map(Number);
+  const y = Number.isFinite(yy) ? yy : 2000;
+  const m = Number.isFinite(mm) ? mm : 1;
+  const d = Number.isFinite(dd) ? dd : 1;
+  const dt = new Date(y, m - 1, d);
+  return dt.getDay(); // 0..6
+}
+
+function getDayOfMonthFromLocalDate(date: unknown): number {
+  const s = safeString(date, todayISO());
+  const parts = s.split("-").map(Number);
+  const dd = parts[2];
+  return Number.isFinite(dd) ? dd : new Date().getDate();
 }
 
 export class CreateHabit {
@@ -24,60 +61,102 @@ export class CreateHabit {
 
   async execute(input: {
     name: string;
-    color: string;
     icon: string;
-    schedule: Habit["schedule"];
-    endCondition: Habit["endCondition"];
-    timeOfDay: Habit["timeOfDay"];
+    color: string;
+    type: "daily" | "weekly" | "monthly";
 
-    // NUEVO
-    startTime: Habit["startTime"];
-    endTime?: Habit["endTime"]; // opcional, default +30
+    startTime?: unknown;
+    endTime?: unknown;
 
-    reminderOffsetMinutes?: number;
-  }) {
-    const name = input.name.trim();
-    if (!name) throw new Error("Habit name is required");
+    weeklyDays?: unknown; // number[] 0..6
+    monthDays?: unknown; // number[] 1..31
 
-    const startTime = input.startTime;
-    if (!isHHmm(startTime)) throw new Error("startTime inválido");
+    reminderOffsetMinutes?: unknown; // number|null
+    date?: unknown; // opcional, por si un día lo usas
+  }): Promise<{ ok: true; habit: Habit } | { ok: false }> {
+    try {
+      const name = safeString(input.name, "").trim();
+      if (!name) return { ok: false };
 
-    const endTimeRaw = input.endTime ?? addMinutesHHmm(startTime, 30);
-    const endTime = isHHmm(endTimeRaw)
-      ? endTimeRaw
-      : addMinutesHHmm(startTime, 30);
+      const icon = safeString(input.icon, "🔥");
+      const color = safeString(input.color, "#e6bc01");
 
-    // si por alguna razón queda igual, lo movemos +30
-    const safeEndTime =
-      endTime === startTime ? addMinutesHHmm(startTime, 30) : endTime;
+      const startTime = safeHHmm(input.startTime, "08:00");
+      const endTime = safeHHmm(input.endTime, "08:30");
 
-    const habit: Habit = {
-      id: randomUUID(),
-      name,
-      color: input.color,
-      icon: input.icon,
-      schedule: input.schedule,
+      const timeOfDay = getTimeOfDayFromHour(startTime);
 
-      endCondition: input.endCondition ?? { type: "none" },
+      const reminderOffsetMinutes =
+        input.reminderOffsetMinutes === null ||
+        input.reminderOffsetMinutes === undefined
+          ? null
+          : Number(input.reminderOffsetMinutes);
 
-      // Bloque horario
-      startTime,
-      endTime: safeEndTime,
+      // ✅ schedule
+      const type = input.type ?? "daily";
 
-      // Legacy: mantenemos igual al startTime mientras migras
-      time: startTime,
+      let schedule: HabitSchedule;
 
-      timeOfDay: input.timeOfDay,
+      if (type === "weekly") {
+        const days = uniqueSortedNumbers(input.weeklyDays).filter(
+          (d) => d >= 0 && d <= 6
+        );
 
-      calendarEventId: null,
+        // fallback seguro: si viene vacío, usamos día actual
+        const fallbackDay = getDayOfWeekFromLocalDate(input.date);
+        schedule = {
+          type: "weekly",
+          daysOfWeek: days.length ? days : [fallbackDay],
+        };
+      } else if (type === "monthly") {
+        const days = uniqueSortedNumbers(input.monthDays).filter(
+          (d) => d >= 1 && d <= 31
+        );
 
-      reminderOffsetMinutes:
-        input.reminderOffsetMinutes != null
-          ? input.reminderOffsetMinutes
+        // fallback seguro: si viene vacío, usamos día del mes actual
+        const fallbackDay = getDayOfMonthFromLocalDate(input.date);
+        schedule = {
+          type: "monthly",
+          daysOfMonth: days.length ? days : [fallbackDay],
+        };
+      } else {
+        schedule = { type: "daily" };
+      }
+
+      const habit: Habit = {
+        id: crypto.randomUUID(),
+        name,
+        icon,
+        color,
+        schedule,
+
+        // bloque horario
+        startTime,
+        endTime,
+
+        // legacy
+        time: startTime,
+
+        timeOfDay,
+
+        // notifs
+        reminderOffsetMinutes: Number.isFinite(reminderOffsetMinutes as number)
+          ? (reminderOffsetMinutes as number)
           : null,
-    };
 
-    await this.habitRepository.create(habit);
-    return habit;
+        // calendar
+        calendarEventId: null,
+
+        // endCondition (si ya lo tienes en la entidad)
+        endCondition: { type: "none" },
+      } as any;
+
+      await this.habitRepository.create(habit);
+
+      return { ok: true, habit };
+    } catch (e) {
+      console.error("[CreateHabit] failed", e);
+      return { ok: false };
+    }
   }
 }

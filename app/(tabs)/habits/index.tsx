@@ -14,21 +14,44 @@ import {
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
-function formatSchedule(schedule: HabitSchedule): string {
-  if (schedule.type === "daily") return "Diario";
+// ✅ Robusto: no revienta si el schedule no trae daysOfWeek (daily / monthly / legacy)
+function formatSchedule(schedule: HabitSchedule | any): string {
+  if (!schedule || typeof schedule !== "object") return "Diario";
 
-  const map: Record<number, string> = {
-    0: "D",
-    1: "L",
-    2: "M",
-    3: "X",
-    4: "J",
-    5: "V",
-    6: "S",
-  };
+  const type = schedule.type;
 
-  const sorted = [...schedule.daysOfWeek].sort();
-  return sorted.map((d) => map[d]).join(" · ");
+  if (type === "daily") return "Diario";
+
+  if (type === "weekly") {
+    const map: Record<number, string> = {
+      0: "D",
+      1: "L",
+      2: "M",
+      3: "X",
+      4: "J",
+      5: "V",
+      6: "S",
+    };
+
+    const days = Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [];
+    const sorted = [...days].sort((a, b) => a - b);
+
+    return sorted.length
+      ? sorted.map((d) => map[d] ?? "?").join(" · ")
+      : "Semanal";
+  }
+
+  // ✅ Si ya existe monthly en tu app aunque la entidad no lo tenga tipado aún
+  if (type === "monthly") {
+    const days = Array.isArray(schedule.daysOfMonth)
+      ? schedule.daysOfMonth
+      : [];
+    const sorted = [...days].sort((a, b) => a - b);
+    return sorted.length ? `Mensual: ${sorted.join(", ")}` : "Mensual";
+  }
+
+  // Fallback seguro
+  return "Diario";
 }
 
 function RightActions({ onDelete }: { onDelete: () => void }) {
