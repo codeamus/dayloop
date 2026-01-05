@@ -1,109 +1,78 @@
 // app/settings/index.tsx
-import {
-  applyReminderSettings,
-  loadReminderSettings,
-  saveReminderSettings,
-  type ReminderSettings,
-} from "@/core/settings/reminderSettings";
 import { Screen } from "@/presentation/components/Screen";
 import { colors } from "@/theme/colors";
 import * as Notifications from "expo-notifications";
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, router } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
 
-type PresetKey = "morning" | "afternoon" | "night";
-
-const PRESETS: Record<
-  PresetKey,
-  { label: string; hour: number; minute: number }
-> = {
-  morning: { label: "Mañana (08:00)", hour: 8, minute: 0 },
-  afternoon: { label: "Tarde (13:00)", hour: 13, minute: 0 },
-  night: { label: "Noche (21:00)", hour: 21, minute: 0 },
-};
+type PermissionState = "loading" | "granted" | "denied" | "undetermined";
 
 export default function SettingsScreen() {
-  const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState<ReminderSettings | null>(null);
-  const [devBusy, setDevBusy] = useState(false);
+  const [permState, setPermState] = useState<PermissionState>("loading");
+  const [busy, setBusy] = useState(false);
+
+  async function refreshPermission() {
+    const res = await Notifications.getPermissionsAsync();
+    const status = res.status; // "granted" | "denied" | "undetermined"
+
+    if (status === "granted") setPermState("granted");
+    else if (status === "denied") setPermState("denied");
+    else setPermState("undetermined");
+  }
 
   useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      const s = await loadReminderSettings();
-      if (!mounted) return;
-      setSettings(s);
-      setLoading(false);
-    }
-
-    init();
-
-    return () => {
-      mounted = false;
-    };
+    refreshPermission();
   }, []);
 
-  async function updateSettings(partial: Partial<ReminderSettings>) {
-    if (!settings) return;
-    const next: ReminderSettings = { ...settings, ...partial };
-    setSettings(next);
-    await saveReminderSettings(next);
-    await applyReminderSettings(next);
-  }
+  const subtitle = useMemo(() => {
+    switch (permState) {
+      case "granted":
+        return "Las notificaciones están activadas. Te ayudaremos con recordatorios.";
+      case "denied":
+        return "Están desactivadas. Puedes activarlas desde Ajustes del teléfono.";
+      case "undetermined":
+        return "Actívalas para recibir recordatorios de tus hábitos.";
+      default:
+        return "Cargando…";
+    }
+  }, [permState]);
 
-  function currentPreset(): PresetKey | null {
-    if (!settings) return null;
-    const match = (
-      Object.entries(PRESETS) as [PresetKey, { hour: number; minute: number }][]
-    ).find(([, v]) => v.hour === settings.hour && v.minute === settings.minute);
-    return match?.[0] ?? null;
-  }
-
-  async function devCancelAllScheduledNotifications() {
+  async function onPressEnable() {
     try {
-      setDevBusy(true);
-      await Notifications.cancelAllScheduledNotificationsAsync();
-      Alert.alert(
-        "DEV",
-        "Listo: se cancelaron todas las notificaciones programadas."
-      );
+      setBusy(true);
+
+      // iOS/Android: si está undetermined, esto abre el prompt del sistema
+      const res = await Notifications.requestPermissionsAsync();
+      await refreshPermission();
+
+      // Si el usuario ya lo denegó previamente, no aparecerá el prompt.
+      // En ese caso, hay que ir a Ajustes del sistema.
+      if (res.status !== "granted") {
+        Alert.alert(
+          "Notificaciones desactivadas",
+          "Para activarlas debes hacerlo desde Ajustes del teléfono (Notificaciones → Dayloop)."
+        );
+      }
     } catch (e) {
-      console.error("[DEV] cancelAllScheduledNotifications failed", e);
+      console.error("[Settings] requestPermissionsAsync failed", e);
       Alert.alert(
-        "DEV",
-        "No se pudieron cancelar las notificaciones. Revisa consola/logs."
+        "Error",
+        "No se pudieron solicitar permisos de notificaciones. Intenta de nuevo."
       );
     } finally {
-      setDevBusy(false);
+      setBusy(false);
     }
   }
 
-  function onPressDevCancelAll() {
-    Alert.alert(
-      "Cancelar notificaciones (DEV)",
-      "Esto borrará TODAS las notificaciones programadas en este dispositivo para la app.\n\nÚsalo solo para limpiar notificaciones fantasma.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Sí, cancelar",
-          style: "destructive",
-          onPress: devCancelAllScheduledNotifications,
-        },
-      ]
-    );
-  }
-
-  if (loading || !settings) {
+  if (permState === "loading") {
     return (
       <Screen>
         <View style={styles.center}>
@@ -114,7 +83,9 @@ export default function SettingsScreen() {
     );
   }
 
-  const presetKey = currentPreset();
+  const isGranted = permState === "granted";
+  const showEnableButton = permState === "undetermined";
+  const showSystemHint = permState === "denied";
 
   return (
     <Screen>
@@ -133,109 +104,77 @@ export default function SettingsScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Sección recordatorio diario */}
+      {/* Notificaciones */}
       <View style={styles.card}>
         <View style={styles.rowTop}>
           <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={styles.cardTitle}>Recordatorio diario</Text>
-            <Text style={styles.cardSubtitle}>
-              Te avisamos una vez al día para revisar tus hábitos.
-            </Text>
+            <Text style={styles.cardTitle}>Notificaciones</Text>
+            <Text style={styles.cardSubtitle}>{subtitle}</Text>
           </View>
 
-          <Switch
-            value={settings.enabled}
-            onValueChange={(value) => updateSettings({ enabled: value })}
-            trackColor={{
-              false: "rgba(63,90,105,0.9)",
-              true: "rgba(230,188,1,0.35)",
-            }}
-            thumbColor={settings.enabled ? colors.primary : colors.mutedText}
-            ios_backgroundColor="rgba(63,90,105,0.9)"
-          />
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionLabel}>Horario</Text>
-          {!settings.enabled && (
-            <Text style={styles.sectionHint}>Actívalo para elegir</Text>
-          )}
-        </View>
-
-        <View style={styles.presetRow}>
-          {(
-            Object.entries(PRESETS) as [PresetKey, typeof PRESETS.morning][]
-          ).map(([key, preset]) => {
-            const active = presetKey === key;
-
-            return (
-              <Pressable
-                key={key}
-                style={[
-                  styles.presetButton,
-                  active && styles.presetButtonActive,
-                  !settings.enabled && styles.presetButtonDisabled,
-                ]}
-                onPress={() =>
-                  updateSettings({ hour: preset.hour, minute: preset.minute })
-                }
-                disabled={!settings.enabled}
-              >
-                <Text
-                  style={[
-                    styles.presetText,
-                    active && styles.presetTextActive,
-                    !settings.enabled && styles.presetTextDisabled,
-                  ]}
-                >
-                  {preset.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {!presetKey && settings.enabled && (
-          <View style={styles.infoBox}>
-            <Text style={styles.infoText}>
-              Horario personalizado:{" "}
-              <Text style={styles.infoTextStrong}>
-                {settings.hour.toString().padStart(2, "0")}:
-                {settings.minute.toString().padStart(2, "0")}
-              </Text>
+          <View
+            style={[
+              styles.statusPill,
+              isGranted ? styles.statusPillOn : styles.statusPillOff,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusText,
+                isGranted ? styles.statusTextOn : styles.statusTextOff,
+              ]}
+            >
+              {isGranted ? "Activadas" : "Desactivadas"}
             </Text>
           </View>
-        )}
+        </View>
 
-        {/* ✅ DEV TOOLS */}
-        {__DEV__ && (
+        {showEnableButton && (
           <>
             <View style={styles.divider} />
-
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>Herramientas (DEV)</Text>
-              <Text style={styles.sectionHint}>Solo desarrollo</Text>
-            </View>
-
             <Pressable
-              style={[styles.devButton, devBusy && { opacity: 0.6 }]}
-              onPress={onPressDevCancelAll}
-              disabled={devBusy}
+              style={[styles.primaryButton, busy && { opacity: 0.6 }]}
+              onPress={onPressEnable}
+              disabled={busy}
             >
-              <Text style={styles.devButtonText}>
-                {devBusy
-                  ? "Cancelando…"
-                  : "DEV: Cancelar todas las notificaciones"}
+              <Text style={styles.primaryButtonText}>
+                {busy ? "Solicitando…" : "Activar notificaciones"}
               </Text>
             </Pressable>
-
-            <Text style={styles.devHint}>
-              Úsalo para limpiar notificaciones fantasma tras borrar hábitos.
-            </Text>
           </>
         )}
+
+        {showSystemHint && (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                Ya las rechazaste antes. Para activarlas:
+              </Text>
+
+              <Text style={styles.steps}>
+                1) Ajustes del teléfono{"\n"}
+                2) Notificaciones{"\n"}
+                3) Dayloop{"\n"}
+                4) Permitir notificaciones
+              </Text>
+
+              <Text style={styles.infoTextMuted}>
+                (iOS/Android no permiten volver a mostrar el prompt cuando
+                eliges “No permitir”.)
+              </Text>
+            </View>
+          </>
+        )}
+
+        {/* Opcional: link a privacy policy (recomendado para stores) */}
+        <View style={styles.divider} />
+        <Link href="https://codeamus.dev/dayloop/privacy" asChild>
+          <Pressable style={styles.linkRow}>
+            <Text style={styles.linkText}>Privacy Policy</Text>
+            <Text style={styles.linkArrow}>›</Text>
+          </Pressable>
+        </Link>
       </View>
     </Screen>
   );
@@ -290,7 +229,8 @@ const styles = StyleSheet.create({
   rowTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 12,
   },
   cardTitle: {
     color: colors.text,
@@ -304,6 +244,25 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+  },
+  statusPillOn: {
+    backgroundColor: "rgba(142,205,110,0.12)",
+    borderColor: "rgba(142,205,110,0.30)",
+  },
+  statusPillOff: {
+    backgroundColor: "rgba(230,188,1,0.10)",
+    borderColor: "rgba(230,188,1,0.30)",
+  },
+  statusText: { fontSize: 12, fontWeight: "900" },
+  statusTextOn: { color: colors.success },
+  statusTextOff: { color: colors.primary },
+
   divider: {
     height: 1,
     backgroundColor: colors.border,
@@ -311,94 +270,44 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
 
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    marginBottom: 8,
+  primaryButton: {
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  sectionLabel: {
-    color: colors.mutedText,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-  sectionHint: {
-    color: "rgba(241,233,215,0.65)",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  presetRow: {
-    flexDirection: "column",
-    gap: 10,
-  },
-  presetButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "rgba(43,62,74,0.20)",
-  },
-  presetButtonActive: {
-    backgroundColor: "rgba(230,188,1,0.18)",
-    borderColor: "rgba(230,188,1,0.55)",
-  },
-  presetButtonDisabled: {
-    opacity: 0.55,
-  },
-
-  presetText: {
-    color: colors.text,
-    fontSize: 13,
-    textAlign: "center",
-    fontWeight: "800",
-  },
-  presetTextActive: {
-    color: colors.primary,
-  },
-  presetTextDisabled: {
-    color: "rgba(241,233,215,0.75)",
-  },
+  primaryButtonText: { color: colors.bg, fontSize: 15, fontWeight: "900" },
 
   infoBox: {
-    marginTop: 12,
     padding: 12,
     borderRadius: 14,
     backgroundColor: "rgba(43,62,74,0.25)",
     borderWidth: 1,
     borderColor: colors.border,
   },
-  infoText: {
+  infoText: { color: colors.text, fontSize: 12, fontWeight: "800" },
+  steps: {
+    marginTop: 8,
+    color: "rgba(241,233,215,0.85)",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+  infoTextMuted: {
+    marginTop: 10,
     color: colors.mutedText,
     fontSize: 12,
     lineHeight: 16,
-  },
-  infoTextStrong: {
-    color: colors.text,
-    fontWeight: "900",
   },
 
-  // DEV
-  devButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255, 99, 71, 0.45)",
-    backgroundColor: "rgba(255, 99, 71, 0.10)",
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 6,
   },
-  devButtonText: {
-    color: colors.text,
-    fontSize: 13,
-    textAlign: "center",
-    fontWeight: "900",
-  },
-  devHint: {
-    marginTop: 8,
-    color: colors.mutedText,
-    fontSize: 12,
-    lineHeight: 16,
-  },
+  linkText: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  linkArrow: { color: colors.mutedText, fontSize: 18, fontWeight: "900" },
 });
