@@ -4,6 +4,7 @@ import type {
   HabitNotificationPlan,
   NotificationScheduler,
 } from "@/domain/services/NotificationScheduler";
+import { newId } from "@/utils/shared/id";
 
 function safeString(v: unknown, fallback = ""): string {
   return typeof v === "string" ? v : fallback;
@@ -120,7 +121,7 @@ export class CreateHabit {
         schedule = { type: "daily" };
       }
 
-      const habitId = crypto.randomUUID();
+      const habitId = newId();
 
       const habit: Habit = {
         id: habitId,
@@ -155,7 +156,9 @@ export class CreateHabit {
         reminderOffsetMinutes: habit.reminderOffsetMinutes ?? null,
       };
 
-      const ids = await this.notificationScheduler.scheduleForHabit(plan);
+      const ids = this.notificationScheduler
+        ? await this.notificationScheduler.scheduleForHabit(plan)
+        : [];
 
       // 3) persistir ids
       habit.notificationIds = ids;
