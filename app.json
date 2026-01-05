@@ -7,9 +7,7 @@
     "scheme": "dayloop",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "icon": "./assets/icon.png",
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.codeamus.dayloop",
@@ -22,7 +20,6 @@
         "tinted": "./assets/icons/ios-tinted.png"
       }
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-icon.png",
@@ -35,14 +32,13 @@
         "color": "#2b3e4a"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.codeamus.dayloop"
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -61,12 +57,10 @@
       "expo-notifications",
       "expo-font"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "router": {},
       "eas": {
