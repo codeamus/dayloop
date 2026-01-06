@@ -1,31 +1,29 @@
-// src/presentation/hooks/useHabitStreak.ts
 import { container } from "@/core/di/container";
-import type { HabitId } from "@/domain/entities/Habit";
-import type { HabitStreak } from "@/domain/usecases/GetHabitStreaks";
-import { useEffect, useState } from "react";
+import type { HabitStreak } from "@/domain/entities/HabitLog";
+import { useCallback, useEffect, useState } from "react";
 
-export function useHabitStreak(habitId: HabitId | undefined) {
-  const [loading, setLoading] = useState(true);
+export function useHabitStreak(habitId?: string) {
   const [streak, setStreak] = useState<HabitStreak | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
     if (!habitId) return;
 
-    let cancelled = false;
-
-    (async () => {
-      setLoading(true);
+    setLoading(true);
+    try {
       const res = await container.getHabitStreaks.execute(habitId);
-      if (!cancelled) {
-        setStreak(res);
-        setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+      setStreak({ habitId, ...res });
+    } catch {
+      // silencio: no rompemos UI por streaks
+      setStreak(null);
+    } finally {
+      setLoading(false);
+    }
   }, [habitId]);
 
-  return { loading, streak };
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { streak, loading, refresh };
 }

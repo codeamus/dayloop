@@ -77,7 +77,7 @@ export default function EditHabitScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const habitId = Array.isArray(id) ? id[0] : id;
 
-  const { streak } = useHabitStreak(habitId);
+  const { streak, refresh: refreshStreak } = useHabitStreak(habitId);
   const { habit, loading } = useHabit(habitId);
 
   // ✅ Ajuste UI: mostrar rachas semanales solo si el hábito es weekly
@@ -442,12 +442,9 @@ export default function EditHabitScreen() {
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}
                 onPressDay={async (date) => {
-                  // tu toggle real + refresh (ya lo tienes)
                   await toggleForDate(date);
                   await refreshMonthly();
-                  await container.getHabitStreaks
-                    .execute(habitId)
-                    .catch(() => null);
+                  await refreshStreak();
                 }}
                 onBlockedPress={({ state }) => {
                   if (state === "future")
