@@ -11,8 +11,19 @@ import {
   View,
 } from "react-native";
 
+function clamp(n: number, min = 0, max = 100) {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+function toPct(rate: number) {
+  // rate esperado 0..1
+  if (!Number.isFinite(rate)) return 0;
+  return clamp(Math.round(rate * 100), 0, 100);
+}
+
 export default function StatsScreen() {
-  const { loading, days } = useWeeklySummary();
+  const { loading, days, error } = useWeeklySummary();
 
   if (loading) {
     return (
@@ -25,14 +36,37 @@ export default function StatsScreen() {
     );
   }
 
-  const daysWithHabits = days.filter((d) => d.totalPlanned > 0);
+  // Solo días donde efectivamente había hábitos planificados
+  const daysWithHabits = days.filter((d) => (d.totalPlanned ?? 0) > 0);
+
   const overallRate =
     daysWithHabits.length === 0
       ? 0
-      : daysWithHabits.reduce((acc, d) => acc + d.completionRate, 0) /
+      : daysWithHabits.reduce((acc, d) => acc + (d.completionRate ?? 0), 0) /
         daysWithHabits.length;
 
-  const overallPct = Math.round(overallRate * 100);
+  const overallPct = toPct(overallRate);
+
+  const weekPlanned = daysWithHabits.reduce(
+    (acc, d) => acc + (d.totalPlanned ?? 0),
+    0
+  );
+  const weekDone = daysWithHabits.reduce(
+    (acc, d) => acc + (d.totalDone ?? 0),
+    0
+  );
+
+  const bestDay =
+    daysWithHabits.length === 0
+      ? null
+      : daysWithHabits.reduce((best, cur) => {
+          const bestPct = toPct(best.completionRate ?? 0);
+          const curPct = toPct(cur.completionRate ?? 0);
+          if (curPct > bestPct) return cur;
+          if (curPct < bestPct) return best;
+          // empate: el que tenga más hábitos hechos
+          return (cur.totalDone ?? 0) > (best.totalDone ?? 0) ? cur : best;
+        }, daysWithHabits[0]);
 
   return (
     <Screen>
@@ -50,6 +84,7 @@ export default function StatsScreen() {
         <Text style={styles.headerTitle}>Estadísticas</Text>
         <View style={{ width: 60 }} />
       </View>
+      {error && <Text style={styles.empty}>{error}</Text>}
 
       {/* Resumen global */}
       <View style={styles.card}>
@@ -60,13 +95,36 @@ export default function StatsScreen() {
           <View style={styles.bigRight}>
             <Text style={styles.bigHint}>Promedio</Text>
             <Text style={styles.bigSubHint}>
-              (solo días con hábitos planificados)
+              {daysWithHabits.length === 0
+                ? "(sin días con hábitos planificados)"
+                : "(solo días con hábitos planificados)"}
             </Text>
           </View>
         </View>
 
         <View style={styles.bigBarBackground}>
           <View style={[styles.bigBarFill, { width: `${overallPct}%` }]} />
+        </View>
+
+        {/* Mini resumen (simple y útil) */}
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>Semana</Text>
+            <Text style={styles.summaryValue}>
+              {weekDone}/{weekPlanned}
+            </Text>
+          </View>
+
+          <View style={styles.summaryDivider} />
+
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryLabel}>Mejor día</Text>
+            <Text style={styles.summaryValue}>
+              {bestDay
+                ? `${bestDay.label} (${toPct(bestDay.completionRate)}%)`
+                : "—"}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -80,20 +138,28 @@ export default function StatsScreen() {
       )}
 
       {days.map((day) => {
-        const pct = Math.round(day.completionRate * 100);
+        const planned = day.totalPlanned ?? 0;
+        const done = day.totalDone ?? 0;
+
+        // Si no hay planificados, que sea 0% sí o sí (evita NaN)
+        const pct = planned <= 0 ? 0 : toPct(day.completionRate ?? 0);
 
         return (
           <View key={day.date} style={styles.dayRow}>
             <View style={styles.dayHeader}>
               <Text style={styles.dayLabel}>{day.label}</Text>
               <Text style={styles.dayInfo}>
-                {day.totalDone}/{day.totalPlanned} ({pct}%)
+                {done}/{planned} ({pct}%)
               </Text>
             </View>
 
             <View style={styles.barBackground}>
               <View style={[styles.barFill, { width: `${pct}%` }]} />
             </View>
+
+            {planned <= 0 && (
+              <Text style={styles.dayMuted}>Sin hábitos planificados</Text>
+            )}
           </View>
         );
       })}
@@ -200,6 +266,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
 
+  summaryRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  summaryItem: { flex: 1 },
+  summaryLabel: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+  summaryValue: {
+    marginTop: 4,
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  summaryDivider: {
+    width: 1,
+    height: 26,
+    backgroundColor: colors.border,
+    opacity: 0.9,
+  },
+
   sectionTitle: {
     color: colors.mutedText,
     fontSize: 13,
@@ -250,5 +346,11 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 999,
     backgroundColor: colors.success,
+  },
+  dayMuted: {
+    marginTop: 8,
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: "800",
   },
 });
