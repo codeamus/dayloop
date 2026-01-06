@@ -1,8 +1,10 @@
 // app/(tabs)/habits/[id].tsx
 import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
+import MonthlyCalendar from "@/presentation/components/MonthlyCalendar";
 import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
+import { useHabitMonthlyStats } from "@/presentation/hooks/useHabitMonthlyStats";
 import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
@@ -75,6 +77,18 @@ export default function EditHabitScreen() {
 
   const { streak } = useHabitStreak(habitId);
   const { habit, loading } = useHabit(habitId);
+
+  // ✅ Ajuste UI: mostrar rachas semanales solo si el hábito es weekly
+  const isWeeklyHabit = habit?.schedule?.type === "weekly";
+
+  // ✅ UI mensual + validación real
+  const {
+    stats: monthlyStats,
+    loading: monthlyLoading,
+    prevMonth,
+    nextMonth,
+    refresh: refreshMonthly,
+  } = useHabitMonthlyStats(habitId);
 
   const [name, setName] = useState("");
   const [scheduleType, setScheduleType] = useState<ScheduleType>("daily");
@@ -266,6 +280,10 @@ export default function EditHabitScreen() {
     };
 
     await container.updateHabit.execute(updated);
+
+    // ✅ refrescamos el calendario mensual después de guardar (validación real)
+    await refreshMonthly();
+
     router.back();
   }
 
@@ -354,7 +372,8 @@ export default function EditHabitScreen() {
               </Text>
             </View>
 
-            {streak.bestWeeklyStreak > 0 && (
+            {/* ✅ Ajuste: solo mostrar semanal si el hábito es weekly */}
+            {isWeeklyHabit && (
               <>
                 <View style={styles.streakRow}>
                   <Text style={styles.streakLabel}>Racha semanal actual</Text>
@@ -373,6 +392,54 @@ export default function EditHabitScreen() {
             )}
           </View>
         )}
+
+        {/* Calendario mensual + validación real */}
+        <View style={styles.monthlyCard}>
+          <View style={styles.monthlyHeader}>
+            <Text style={styles.monthlyTitle}>Calendario mensual</Text>
+            {monthlyLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+          </View>
+
+          {!!monthlyStats && (
+            <>
+              <View style={styles.monthlyStatsRow}>
+                <View style={styles.monthlyPill}>
+                  <Text style={styles.monthlyPillText}>
+                    🔥 {monthlyStats.currentMonthlyStreak}
+                  </Text>
+                </View>
+
+                <View style={styles.monthlyPill}>
+                  <Text style={styles.monthlyPillText}>
+                    🏆 {monthlyStats.bestMonthlyStreak}
+                  </Text>
+                </View>
+
+                <View style={styles.monthlyPill}>
+                  <Text style={styles.monthlyPillText}>
+                    ✅ {monthlyStats.doneDays}/{monthlyStats.scheduledDays}
+                  </Text>
+                </View>
+
+                <View style={styles.monthlyPill}>
+                  <Text style={styles.monthlyPillText}>
+                    📊 {Math.round(monthlyStats.completionRate * 100)}%
+                  </Text>
+                </View>
+              </View>
+
+              <MonthlyCalendar
+                year={monthlyStats.year}
+                month={monthlyStats.month}
+                days={monthlyStats.days}
+                onPrevMonth={prevMonth}
+                onNextMonth={nextMonth}
+              />
+            </>
+          )}
+        </View>
 
         {/* Nombre */}
         <Text style={styles.label}>Nombre</Text>
@@ -655,6 +722,38 @@ const styles = StyleSheet.create({
   },
   streakLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "800" },
   streakValue: { color: colors.text, fontSize: 12, fontWeight: "900" },
+
+  // ✅ Monthly module styles
+  monthlyCard: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: "rgba(50,73,86,0.55)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  monthlyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  monthlyTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  monthlyStatsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  monthlyPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(43,62,74,0.35)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  monthlyPillText: { color: colors.text, fontWeight: "900", fontSize: 12 },
 
   label: {
     color: colors.mutedText,
