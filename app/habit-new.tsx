@@ -299,7 +299,7 @@ export default function HabitNewScreen() {
           ref={bottomSheetRef}
           index={0}
           snapPoints={snapPoints}
-          enablePanDownToClose
+          enablePanDownToClose={!showTimePicker}
           onChange={handleSheetChange}
           backgroundStyle={styles.sheetBackground}
           handleIndicatorStyle={styles.handleIndicator}
@@ -310,6 +310,8 @@ export default function HabitNewScreen() {
           <BottomSheetScrollView
             contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={!showTimePicker}
+            bounces={!showTimePicker}
           >
             <View style={styles.headerRow}>
               <Text style={styles.title}>Nuevo hábito</Text>
