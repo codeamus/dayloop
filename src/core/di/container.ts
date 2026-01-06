@@ -5,13 +5,15 @@ import { SqliteHabitRepository } from "@/data/sqlite/SqliteHabitRepository";
 import { CreateHabit } from "@/domain/usecases/CreateHabit";
 import { DeleteHabit } from "@/domain/usecases/DeleteHabit";
 import { GetAllHabits } from "@/domain/usecases/GetAllHabits";
-import { GetHabitMonthlyStats } from "@/domain/usecases/GetHabitMonthlyStats"; // ✅ NUEVO
+import { GetHabitMonthlyStats } from "@/domain/usecases/GetHabitMonthlyStats";
 import { GetHabitStreaks } from "@/domain/usecases/GetHabitStreaks";
 import { GetTodayHabits } from "@/domain/usecases/GetTodayHabits";
 import { GetWeeklySummary } from "@/domain/usecases/GetWeeklySummary";
 import { ToggleHabitForDate } from "@/domain/usecases/ToggleHabitForDate";
 import { ToggleHabitForToday } from "@/domain/usecases/ToggleHabitForToday";
 import { UpdateHabit } from "@/domain/usecases/UpdateHabit";
+
+import { ExpoNotificationScheduler } from "@/infraestructure/notifications/ExpoNotificationScheduler";
 
 /**
  * Container DI (simple):
@@ -24,6 +26,11 @@ class Container {
   // =========================
   habitRepository = new SqliteHabitRepository();
   habitLogRepository = new SqliteHabitLogRepository();
+
+  // =========================
+  // Servicios (infra)
+  // =========================
+  notificationScheduler = new ExpoNotificationScheduler();
 
   // =========================
   // Usecases (domain layer)
@@ -44,10 +51,17 @@ class Container {
     this.habitRepository,
     this.habitLogRepository
   );
+
   // CRUD
-  createHabit = new CreateHabit(this.habitRepository);
+  createHabit = new CreateHabit(
+    this.habitRepository,
+    this.notificationScheduler
+  );
   getAllHabits = new GetAllHabits(this.habitRepository);
-  deleteHabit = new DeleteHabit(this.habitRepository);
+  deleteHabit = new DeleteHabit(
+    this.habitRepository,
+    this.notificationScheduler
+  );
   updateHabit = new UpdateHabit(this.habitRepository);
 
   // Summaries / Stats
@@ -61,8 +75,7 @@ class Container {
     this.habitLogRepository
   );
 
-  // ✅ NUEVO: Stats mensuales reales (scheduled vs done + streak mensual)
-  // Esto lo consume useHabitMonthlyStats() para renderizar el calendario mensual.
+  // Stats mensuales
   getHabitMonthlyStats = new GetHabitMonthlyStats(
     this.habitRepository,
     this.habitLogRepository

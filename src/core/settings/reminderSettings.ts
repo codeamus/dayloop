@@ -1,8 +1,5 @@
 // src/core/settings/reminderSettings.ts
-import {
-     cancelAllScheduledNotifications,
-     scheduleDailyReminder,
-} from "@/core/notifications/notifications";
+import { cancelDailyReminder } from "@/core/notifications/notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "dayloop:reminder_settings";
@@ -23,6 +20,7 @@ export async function loadReminderSettings(): Promise<ReminderSettings> {
   try {
     const raw = await AsyncStorage.getItem(KEY);
     if (!raw) return DEFAULT_SETTINGS;
+
     const parsed = JSON.parse(raw) as ReminderSettings;
 
     if (
@@ -50,14 +48,18 @@ export async function saveReminderSettings(
   }
 }
 
-// Aplica la configuración: programa o cancela notis
+/**
+ * ✅ V1: DESACTIVAMOS el "resumen diario" global.
+ * Motivo: genera duplicados (choca con recordatorios por hábito).
+ *
+ * Igual limpiamos cualquier daily reminder antiguo que hubiese quedado programado.
+ */
 export async function applyReminderSettings(
-  settings: ReminderSettings
+  _settings: ReminderSettings
 ): Promise<void> {
-  if (!settings.enabled) {
-    await cancelAllScheduledNotifications();
-    return;
+  try {
+    await cancelDailyReminder();
+  } catch (e) {
+    console.warn("[reminderSettings] cancelDailyReminder failed", e);
   }
-
-  await scheduleDailyReminder(settings.hour, settings.minute);
 }

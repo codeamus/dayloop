@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -19,9 +20,28 @@ export default function SettingsScreen() {
   const [permState, setPermState] = useState<PermissionState>("loading");
   const [busy, setBusy] = useState(false);
 
+  // ✅ Android: channel
+  async function ensureAndroidChannel() {
+    if (Platform.OS !== "android") return;
+    await Notifications.setNotificationChannelAsync("default", {
+      name: "default",
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#FF231F7C",
+    });
+  }
+
+  async function ensurePermission(): Promise<boolean> {
+    const perm = await Notifications.getPermissionsAsync();
+    if (perm.status === "granted") return true;
+
+    const req = await Notifications.requestPermissionsAsync();
+    return req.status === "granted";
+  }
+
   async function refreshPermission() {
     const res = await Notifications.getPermissionsAsync();
-    const status = res.status; // "granted" | "denied" | "undetermined"
+    const status = res.status;
 
     if (status === "granted") setPermState("granted");
     else if (status === "denied") setPermState("denied");
@@ -49,13 +69,11 @@ export default function SettingsScreen() {
     try {
       setBusy(true);
 
-      // iOS/Android: si está undetermined, esto abre el prompt del sistema
-      const res = await Notifications.requestPermissionsAsync();
+      await ensureAndroidChannel();
+      const ok = await ensurePermission();
       await refreshPermission();
 
-      // Si el usuario ya lo denegó previamente, no aparecerá el prompt.
-      // En ese caso, hay que ir a Ajustes del sistema.
-      if (res.status !== "granted") {
+      if (!ok) {
         Alert.alert(
           "Notificaciones desactivadas",
           "Para activarlas debes hacerlo desde Ajustes del teléfono (Notificaciones → Dayloop)."
@@ -67,6 +85,89 @@ export default function SettingsScreen() {
         "Error",
         "No se pudieron solicitar permisos de notificaciones. Intenta de nuevo."
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ✅ TEST 5s: agenda una notificación de prueba
+  async function testNotificationIn5s() {
+    try {
+      setBusy(true);
+
+      await ensureAndroidChannel();
+
+      const ok = await ensurePermission();
+      await refreshPermission();
+
+      if (!ok) {
+        Alert.alert("Permiso requerido", "Activa notificaciones para probar.");
+        return;
+      }
+
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "DEBUG DAYLOOP",
+          body: "Si ves esto, las notificaciones funcionan ✅",
+          sound: Platform.OS === "ios" ? "default" : undefined,
+        },
+        trigger: { seconds: 5 },
+      });
+
+      Alert.alert("Listo", `Programada en 5s.\nID: ${id}`);
+    } catch (e) {
+      console.error("[Settings] testNotificationIn5s error", e);
+      Alert.alert("Error", "Falló la prueba de notificación.");
+    } finally {
+      setBusy(false);
+      await refreshPermission();
+    }
+  }
+
+  // ✅ LISTAR: muestra un preview de las primeras 8
+  async function listScheduledNotifications() {
+    try {
+      setBusy(true);
+
+      const all = await Notifications.getAllScheduledNotificationsAsync();
+      if (!all.length) {
+        Alert.alert("Programadas", "No hay notificaciones programadas.");
+        return;
+      }
+
+      const preview = all
+        .slice(0, 8)
+        .map((n, i) => {
+          const title = n.content?.title ?? "(sin título)";
+          const body = n.content?.body ?? "";
+          const trigger = JSON.stringify(n.trigger ?? {});
+          return `${i + 1}) ${title} — ${body}\nID: ${
+            n.identifier
+          }\nTrigger: ${trigger}`;
+        })
+        .join("\n\n");
+
+      Alert.alert(
+        `Programadas (${all.length})`,
+        preview.length > 3500 ? preview.slice(0, 3500) + "…" : preview
+      );
+    } catch (e) {
+      console.error("[Settings] listScheduledNotifications error", e);
+      Alert.alert("Error", "No se pudieron listar las programadas.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ✅ BORRAR TODAS: clave para limpiar duplicados viejos
+  async function cancelAllScheduledNotifications() {
+    try {
+      setBusy(true);
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      Alert.alert("Listo", "Se borraron TODAS las notificaciones programadas.");
+    } catch (e) {
+      console.error("[Settings] cancelAllScheduledNotifications error", e);
+      Alert.alert("Error", "No se pudieron borrar las programadas.");
     } finally {
       setBusy(false);
     }
@@ -143,6 +244,38 @@ export default function SettingsScreen() {
             </Pressable>
           </>
         )}
+
+        <View style={styles.divider} />
+
+        <Pressable
+          style={[styles.primaryButton, busy && { opacity: 0.6 }]}
+          onPress={testNotificationIn5s}
+          disabled={busy}
+        >
+          <Text style={styles.primaryButtonText}>
+            {busy ? "Probando…" : "Test notificación (5s)"}
+          </Text>
+        </Pressable>
+
+        <View style={{ height: 10 }} />
+
+        <Pressable
+          style={[styles.cancelButton, busy && { opacity: 0.6 }]}
+          onPress={listScheduledNotifications}
+          disabled={busy}
+        >
+          <Text style={styles.cancelText}>Ver notificaciones programadas</Text>
+        </Pressable>
+
+        <View style={{ height: 10 }} />
+
+        <Pressable
+          style={[styles.dangerButton, busy && { opacity: 0.6 }]}
+          onPress={cancelAllScheduledNotifications}
+          disabled={busy}
+        >
+          <Text style={styles.dangerText}>Borrar TODAS las programadas</Text>
+        </Pressable>
 
         {showSystemHint && (
           <>
@@ -279,6 +412,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   primaryButtonText: { color: colors.bg, fontSize: 15, fontWeight: "900" },
+
+  cancelButton: {
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(43,62,74,0.25)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelText: { color: colors.text, fontSize: 14, fontWeight: "900" },
+
+  dangerButton: {
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(220, 70, 70, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(220, 70, 70, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dangerText: { color: colors.text, fontSize: 14, fontWeight: "900" },
 
   infoBox: {
     padding: 12,

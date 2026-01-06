@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 
+import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import { colors } from "@/theme/colors";
@@ -33,6 +34,15 @@ const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
 
 type HabitType = "daily" | "weekly" | "monthly";
 type PickerTarget = "start" | "end";
+
+function parseHHmm(hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  return {
+    hour: Number.isFinite(h) ? h : 8,
+    minute: Number.isFinite(m) ? m : 0,
+  };
+}
+
 
 function hhmmToMinutes(hhmm: string): number {
   const [hStr, mStr] = hhmm.split(":");
@@ -261,8 +271,8 @@ export default function HabitNewScreen() {
       startTime,
       endTime,
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
-      monthlyDays: type === "monthly" ? monthlyDays : undefined,
-      reminderOffsetMinutes,
+      monthlyDays: type === "monthly" ? monthlyDays : undefined, // ✅ ok
+      reminderOffsetMinutes, // null = sin recordatorio
     };
 
     const result = await create(payload);
@@ -270,6 +280,27 @@ export default function HabitNewScreen() {
     if (!result.ok) {
       Alert.alert("No se pudo guardar", "Inténtalo nuevamente.");
       return;
+    }
+
+    if (reminderOffsetMinutes !== null) {
+      const [hStr, mStr] = startTime.split(":");
+      const hour = Number(hStr);
+      const minute = Number(mStr);
+
+      // OJO: necesitamos el id real del hábito creado
+      // Asumo que `create(payload)` te devuelve el hábito o al menos el id.
+      // Ajusta según tu retorno:
+      const createdHabitId = (result as any).habit?.id ?? (result as any).id;
+
+      if (createdHabitId) {
+        await scheduleHabitReminder({
+          habitId: createdHabitId,
+          habitName: name.trim(),
+          hour,
+          minute,
+          offsetMinutes: reminderOffsetMinutes ?? 0,
+        });
+      }
     }
 
     router.back();

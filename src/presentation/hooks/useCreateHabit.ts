@@ -1,5 +1,6 @@
 // src/presentation/hooks/useCreateHabit.ts
 import { container } from "@/core/di/container";
+import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import { addMinutesHHmm } from "@/utils/time";
 import { useState } from "react";
 
@@ -11,22 +12,16 @@ type CreateHabitPayload = {
   startTime?: string;
   endTime?: string;
   weeklyDays?: number[];
-  monthDays?: number[]; // 1..31
-  reminderOffsetMinutes?: number | null;
+  monthlyDays?: number[]; // ✅ unificado
+  reminderOffsetMinutes?: number | null; // null => sin recordatorio
 };
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
 function todayDayOfWeek(): number {
-  const d = new Date();
-  return d.getDay(); // 0..6
+  return new Date().getDay(); // 0..6
 }
 
 function todayDayOfMonth(): number {
-  const d = new Date();
-  return d.getDate(); // 1..31
+  return new Date().getDate(); // 1..31
 }
 
 function safeHHmm(v: any, fallback: string) {
@@ -39,6 +34,16 @@ function safeNumArray(v: any): number[] {
   return v.map(Number).filter((n) => Number.isFinite(n));
 }
 
+function extractCreatedHabitId(result: any): string | null {
+  // soporta varios retornos posibles
+  if (!result) return null;
+  if (typeof result === "string") return result;
+  if (typeof result?.id === "string") return result.id;
+  if (typeof result?.habit?.id === "string") return result.habit.id;
+  if (typeof result?.data?.id === "string") return result.data.id;
+  return null;
+}
+
 export function useCreateHabit() {
   const [isLoading, setIsLoading] = useState(false);
 
@@ -49,23 +54,28 @@ export function useCreateHabit() {
       const startTime = safeHHmm(payload.startTime, "08:00");
       const endTime = safeHHmm(payload.endTime, addMinutesHHmm(startTime, 30));
 
-      const weeklyDays = safeNumArray(payload.weeklyDays);
-      const monthDays = safeNumArray(payload.monthDays)
+      const weeklyDays = safeNumArray(payload.weeklyDays).map(Math.trunc);
+      const monthlyDays = safeNumArray(payload.monthlyDays)
         .map((d) => Math.trunc(d))
         .filter((d) => d >= 1 && d <= 31);
 
       const type = payload.type;
 
+      const reminderOffsetMinutes =
+        payload.reminderOffsetMinutes === null ||
+        payload.reminderOffsetMinutes === undefined
+          ? null
+          : Number(payload.reminderOffsetMinutes);
+
       const input = {
-        name: payload.name,
+        name: payload.name.trim(),
         icon: payload.icon,
         color: payload.color,
         type,
-
         startTime,
         endTime,
 
-        // ✅ SIEMPRE mandamos arrays aunque estén vacíos (evita undefined.includes)
+        // ✅ SIEMPRE arrays
         weeklyDays:
           type === "weekly"
             ? weeklyDays.length
@@ -73,17 +83,52 @@ export function useCreateHabit() {
               : [todayDayOfWeek()]
             : [],
 
-        monthDays:
+        monthlyDays:
           type === "monthly"
-            ? monthDays.length
-              ? monthDays
+            ? monthlyDays.length
+              ? monthlyDays
               : [todayDayOfMonth()]
             : [],
 
-        reminderOffsetMinutes: payload.reminderOffsetMinutes ?? 0,
+        // ✅ null significa “sin recordatorio”
+        reminderOffsetMinutes,
       };
 
       const result = await container.createHabit.execute(input as any);
+
+      // ✅ IMPORTANTE: asegúrate de sacar el habitId real
+      const habitId = extractCreatedHabitId(result);
+
+      if (habitId) {
+        // 1) cancelar cualquier cosa previa (por si createHabit ya dejó algo)
+        //    o si estás reusando IDs por error
+        //    (aquí no tienes "habit.notificationIds" aún, así que cancela por hábito si ya lo tienes en result)
+        //    Si no, omite este bloque en create (es más importante en update).
+
+        if (reminderOffsetMinutes !== null) {
+          const [hStr, mStr] = startTime.split(":");
+          const hour = Number(hStr);
+          const minute = Number(mStr);
+
+          const scheduledId = await scheduleHabitReminder({
+            habitId,
+            habitName: input.name,
+            hour,
+            minute,
+            offsetMinutes: reminderOffsetMinutes ?? 0,
+          });
+
+          if (scheduledId) {
+            // ✅ Guarda en DB el id REAL (para luego poder cancelarlo)
+            await container.habitRepository.updateNotifications(
+              habitId as any,
+              [scheduledId]
+            );
+            // si no tienes ese acceso directo, crea un usecase UpdateHabitNotifications
+          }
+        }
+      }
+
       return result;
     } finally {
       setIsLoading(false);

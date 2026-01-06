@@ -76,6 +76,10 @@ export async function cancelScheduledNotification(id: string) {
   }
 }
 
+export async function cancelDailyReminder() {
+  await cancelScheduledNotification(DAILY_ID);
+}
+
 // ==========================
 // Recordatorio diario (resumen)
 // ==========================
@@ -107,55 +111,29 @@ export async function scheduleDailyReminder(hour: number, minute: number) {
 }
 
 // ==========================
-// Recordatorio por hábito (diario)
+// ❌ DEPRECATED: Recordatorio por hábito
 // ==========================
-export async function scheduleHabitReminder(options: {
+//
+// Antes programaba recordatorios por hábito aquí, pero ahora eso lo hace
+// el NotificationScheduler (ExpoNotificationScheduler) y esto generaba duplicados.
+//
+// Si todavía hay un llamado perdido en el código a esta función, NO queremos
+// que programe nada.
+export async function scheduleHabitReminder(_options: {
   habitId: HabitId;
   habitName: string;
   hour: number;
   minute: number;
   offsetMinutes?: number;
 }) {
-  if (isExpoGoAndroid) return;
-
-  const Notifs = assertNotifications();
-  const ok = await requestNotificationPermission();
-  if (!ok) return;
-
-  const offset = options.offsetMinutes ?? 0;
-  const total = options.hour * 60 + options.minute - offset;
-  const minutesInDay = 24 * 60;
-
-  const normalized = ((total % minutesInDay) + minutesInDay) % minutesInDay;
-  const reminderHour = Math.floor(normalized / 60);
-  const reminderMinute = normalized % 60;
-
-  const id = `habit-${options.habitId}`;
-
-  // Evitar duplicados solo para este hábito
-  await cancelScheduledNotification(id);
-
-  const trigger: NotificationsType.NotificationTriggerInput = {
-    type: Notifs.SchedulableTriggerInputTypes.CALENDAR,
-    hour: reminderHour,
-    minute: reminderMinute,
-    repeats: true,
-  };
-
-  await Notifs.scheduleNotificationAsync({
-    identifier: id,
-    content: {
-      title: "DAYLOOP",
-      body: `¡${options.habitName}! Es momento de cumplir tu hábito 💪`,
-      sound: Platform.OS === "ios" ? "default" : undefined,
-    },
-    trigger,
-  });
+  // intentionally no-op
+  console.warn(
+    "[notifications] scheduleHabitReminder() deprecated (no-op). Use NotificationScheduler."
+  );
 }
 
 // ==========================
-// Debug (opcional): notificación en X segundos
-// Deja esto aquí por si alguna vez necesitas testear, pero NO lo llames en producción.
+// Debug: notificación en X segundos
 // ==========================
 export async function scheduleDebugNotificationIn(seconds: number) {
   if (isExpoGoAndroid) return;
