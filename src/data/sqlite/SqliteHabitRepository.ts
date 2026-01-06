@@ -1,5 +1,5 @@
 // src/data/sqlite/SqliteHabitRepository.ts
-import { db } from "@/data/sqlite/database"; // 👈 ajusta la ruta si tu db está en otro lado
+import { db } from "@/data/sqlite/database";
 import type {
   Habit,
   HabitId,
@@ -175,6 +175,68 @@ export class SqliteHabitRepository implements HabitRepository {
       id,
     ]);
     return row ? toHabit(row) : null;
+  }
+
+  // ✅ FIX: faltaba este método (por eso crasheaba al actualizar horas)
+  async update(habit: Habit): Promise<void> {
+    const scheduleType = habit.schedule?.type ?? "daily";
+    const scheduleDays =
+      scheduleType === "weekly"
+        ? JSON.stringify((habit.schedule as any).daysOfWeek ?? [])
+        : scheduleType === "monthly"
+        ? JSON.stringify((habit.schedule as any).daysOfMonth ?? [])
+        : null;
+
+    const startTime = habit.startTime ?? habit.time ?? "08:00";
+    const endTime = habit.endTime ?? "08:30";
+    const timeOfDay = habit.timeOfDay ?? "morning";
+
+    db.runSync(
+      `
+      UPDATE habits
+      SET
+        name = ?,
+        color = ?,
+        icon = ?,
+
+        schedule_type = ?,
+        schedule_days = ?,
+
+        end_condition = ?,
+        time_of_day = ?,
+
+        time = ?,
+        start_time = ?,
+        end_time = ?,
+
+        calendar_event_id = ?,
+        reminder_offset_minutes = ?,
+        notification_ids = ?
+
+      WHERE id = ?
+      `,
+      [
+        habit.name,
+        habit.color,
+        habit.icon,
+
+        scheduleType,
+        scheduleDays,
+
+        JSON.stringify(habit.endCondition ?? { type: "none" }),
+        timeOfDay,
+
+        habit.time ?? startTime,
+        startTime,
+        endTime,
+
+        habit.calendarEventId ?? null,
+        habit.reminderOffsetMinutes ?? null,
+        JSON.stringify(habit.notificationIds ?? []),
+
+        habit.id,
+      ]
+    );
   }
 
   async updateNotifications(
