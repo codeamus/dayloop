@@ -3,6 +3,7 @@ import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import MonthlyCalendar from "@/presentation/components/MonthlyCalendar";
 import { Screen } from "@/presentation/components/Screen";
+import { useToast } from "@/presentation/components/ToastProvider";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitMonthlyStats } from "@/presentation/hooks/useHabitMonthlyStats";
 import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
@@ -13,7 +14,6 @@ import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -113,6 +113,7 @@ export default function EditHabitScreen() {
   );
 
   const { toggle: toggleForDate } = useToggleHabitForDate(habitId);
+  const { show } = useToast();
 
   useEffect(() => {
     if (!habitId) return;
@@ -441,18 +442,18 @@ export default function EditHabitScreen() {
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}
                 onPressDay={async (date) => {
-                  // 🔔 Haptic sutil (cross-platform)
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
-                    () => null
-                  );
-
+                  // tu toggle real + refresh (ya lo tienes)
                   await toggleForDate(date);
-
-                  // refrescos
                   await refreshMonthly();
                   await container.getHabitStreaks
                     .execute(habitId)
                     .catch(() => null);
+                }}
+                onBlockedPress={({ state }) => {
+                  if (state === "future")
+                    return show("Aún no puedes marcar días futuros", "info");
+                  if (state === "unscheduled")
+                    return show("Este día no está programado", "info");
                 }}
               />
             </>

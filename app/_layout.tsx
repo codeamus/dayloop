@@ -8,6 +8,7 @@ import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { ToastProvider } from "@/presentation/components/ToastProvider";
 import { colors } from "@/theme/colors";
 import { useAppFonts } from "@/theme/fonts";
 
@@ -38,26 +39,28 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider style={{ backgroundColor: colors.bg }}>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            // ✅ Fondo global consistente con la paleta
-            contentStyle: { backgroundColor: colors.bg },
-          }}
-        >
-          {/* Grupo principal de tabs */}
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-          {/* MODAL: Crear hábito */}
-          <Stack.Screen
-            name="habit-new"
-            options={{
-              presentation: "transparentModal",
-              animation: "fade",
-              contentStyle: { backgroundColor: "transparent" },
+        <ToastProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              // ✅ Fondo global consistente con la paleta
+              contentStyle: { backgroundColor: colors.bg },
             }}
-          />
-        </Stack>
+          >
+            {/* Grupo principal de tabs */}
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+            {/* MODAL: Crear hábito */}
+            <Stack.Screen
+              name="habit-new"
+              options={{
+                presentation: "transparentModal",
+                animation: "fade",
+                contentStyle: { backgroundColor: "transparent" },
+              }}
+            />
+          </Stack>
+        </ToastProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

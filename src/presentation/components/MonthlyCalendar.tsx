@@ -14,8 +14,11 @@ type Props = {
   onPrevMonth: () => void;
   onNextMonth: () => void;
 
-  // opcional: para permitir marcar un día (si lo quieres)
+  // ✅ toggle real (solo done/missed)
   onPressDay?: (date: string) => void;
+
+  // ✅ feedback cuando está bloqueado (future/unscheduled)
+  onBlockedPress?: (info: { date: string; state: MonthlyDayState }) => void;
 };
 
 const WEEKDAYS = ["D", "L", "M", "M", "J", "V", "S"];
@@ -34,26 +37,27 @@ function toLocalYMD(d: Date): string {
   return `${yy}-${mm}-${dd}`;
 }
 
-function stateToStyle(state: MonthlyDayState) {
-  // No uso colores hardcode si tienes theme.
-  // Aquí van clases/estilos base, luego los conectas a tu theme.
+function stateToCellStyle(state: MonthlyDayState) {
   switch (state) {
     case "done":
-      return { opacity: 1, borderWidth: 0 };
+      return { opacity: 1 };
     case "missed":
-      return { opacity: 1, borderWidth: 1 };
+      return { opacity: 1 };
     case "future":
-      return { opacity: 0.5, borderWidth: 0 };
+      return { opacity: 0.55 };
     case "unscheduled":
-      return { opacity: 0.25, borderWidth: 0 };
+      return { opacity: 0.22 };
     default:
-      return { opacity: 1, borderWidth: 0 };
+      return { opacity: 1 };
   }
 }
 
-function isPressableState(state: MonthlyDayState) {
-  // Regla: no permitir toggle en future/unscheduled
+function isToggleAllowed(state: MonthlyDayState) {
   return state === "done" || state === "missed";
+}
+
+function isUnscheduled(state: MonthlyDayState) {
+  return state === "unscheduled";
 }
 
 export default function MonthlyCalendar({
@@ -63,23 +67,18 @@ export default function MonthlyCalendar({
   onPrevMonth,
   onNextMonth,
   onPressDay,
+  onBlockedPress,
 }: Props) {
   const today = useMemo(() => toLocalYMD(new Date()), []);
 
-  // 1) offset para alinear el día 1 del mes con el weekday
   const gridItems = useMemo(() => {
     if (!days.length) return [];
-
     const firstDayWeekday = getWeekDayFromLocalDate(days[0].date); // 0..6
     const padding = Array.from({ length: firstDayWeekday }, () => null);
-
-    // Lista con nulls al inicio para alinear el mes en el grid
     return [...padding, ...days];
   }, [days]);
 
-  // 2) Título del mes
   const monthLabel = useMemo(() => {
-    // Mes en español (simple). Si tienes i18n, cámbialo.
     const months = [
       "Enero",
       "Febrero",
@@ -116,7 +115,7 @@ export default function MonthlyCalendar({
           <Text style={{ fontSize: 24, color: colors.text }}>{"‹"}</Text>
         </Pressable>
 
-        <Text style={{ fontSize: 18, fontWeight: "600", color: colors.text }}>
+        <Text style={{ fontSize: 18, fontWeight: "900", color: colors.text }}>
           {monthLabel}
         </Text>
 
@@ -137,7 +136,7 @@ export default function MonthlyCalendar({
             key={`weekday-${index}-${w}`}
             style={{ flex: 1, alignItems: "center", paddingVertical: 6 }}
           >
-            <Text style={{ color: colors.text }}>{w}</Text>
+            <Text style={{ color: colors.text, fontWeight: "900" }}>{w}</Text>
           </View>
         ))}
       </View>
@@ -155,27 +154,37 @@ export default function MonthlyCalendar({
           }
 
           const isToday = item.date === today;
-          const canPress = onPressDay && isPressableState(item.state);
+          const base = stateToCellStyle(item.state);
 
-          const base = stateToStyle(item.state);
-
-          // Sugerencia: conecta esto a tu theme (colores reales)
           const bg =
             item.state === "done"
-              ? "#2E7D32"
-              : item.state === "missed"
-              ? "transparent"
+              ? colors.success
+              : isUnscheduled(item.state)
+              ? "rgba(241,233,215,0.04)"
               : "transparent";
 
           const borderColor =
-            item.state === "missed" ? "#D32F2F" : "transparent";
-          const textColor = item.state === "done" ? colors.text : colors.text;
+            item.state === "missed"
+              ? colors.danger
+              : isUnscheduled(item.state)
+              ? colors.border
+              : colors.border; // ✅ borde sutil para mantener el grid
+
+          const borderWidth = item.state === "done" ? 0 : 1; // ✅ 1 para missed/unscheduled/future/normal
+
+          const allowToggle = !!onPressDay && isToggleAllowed(item.state);
 
           return (
             <View style={{ flex: 1, aspectRatio: 1, padding: 6 }}>
               <Pressable
-                disabled={!canPress}
-                onPress={() => onPressDay?.(item.date)}
+                // ✅ IMPORTANTE: NO usar disabled aquí, porque si no, no hay toast.
+                onPress={() => {
+                  if (allowToggle) {
+                    onPressDay?.(item.date);
+                    return;
+                  }
+                  onBlockedPress?.({ date: item.date, state: item.state });
+                }}
                 style={{
                   flex: 1,
                   borderRadius: 14,
@@ -183,22 +192,28 @@ export default function MonthlyCalendar({
                   justifyContent: "center",
                   backgroundColor: bg,
                   borderColor,
-                  ...base,
-                  borderWidth: base.borderWidth,
+                  borderWidth,
+                  ...(isUnscheduled(item.state) && {
+                    borderStyle: "dashed",
+                  }),
                 }}
               >
                 <Text
                   style={{
                     fontSize: 14,
-                    fontWeight: isToday ? "800" : "600",
-                    opacity: item.state === "done" ? 1 : 0.9,
-                    color: item.state === "done" ? "white" : textColor,
+                    fontWeight: isToday ? "900" : "800",
+                    color:
+                      item.state === "done"
+                        ? colors.primaryText
+                        : isUnscheduled(item.state)
+                        ? colors.mutedText
+                        : colors.text,
                   }}
                 >
                   {item.dayOfMonth}
                 </Text>
 
-                {/* Puntito para "done" (si no quieres fondo) */}
+                {/* dot opcional para done */}
                 {item.state === "done" ? (
                   <View
                     style={{
@@ -206,8 +221,8 @@ export default function MonthlyCalendar({
                       width: 6,
                       height: 6,
                       borderRadius: 999,
-                      backgroundColor: "white",
-                      opacity: 0.9,
+                      backgroundColor: colors.bg,
+                      opacity: 0.8,
                     }}
                   />
                 ) : null}
