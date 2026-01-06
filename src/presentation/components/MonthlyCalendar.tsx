@@ -21,9 +21,10 @@ type Props = {
   onBlockedPress?: (info: { date: string; state: MonthlyDayState }) => void;
 };
 
-const WEEKDAYS = ["D", "L", "M", "M", "J", "V", "S"];
+// ✅ Lunes -> Domingo
+const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
-// "YYYY-MM-DD" -> weekday 0..6 (local)
+// "YYYY-MM-DD" -> weekday 0..6 (local) (Dom=0)
 function getWeekDayFromLocalDate(dateStr: string): number {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y || 2000, (m || 1) - 1, d || 1);
@@ -35,6 +36,11 @@ function toLocalYMD(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
+}
+
+// Convierte weekday nativo (Dom=0..Sab=6) a weekday "lunes primero" (Lun=0..Dom=6)
+function toMondayFirstIndex(nativeWeekday: number): number {
+  return (nativeWeekday + 6) % 7; // Dom(0)->6, Lun(1)->0, ...
 }
 
 function stateToCellStyle(state: MonthlyDayState) {
@@ -71,10 +77,18 @@ export default function MonthlyCalendar({
 }: Props) {
   const today = useMemo(() => toLocalYMD(new Date()), []);
 
+  /**
+   * Grid:
+   * - Rellenamos con nulls al inicio según el weekday del día 1 del mes.
+   * - ✅ Importante: Lunes primero (no domingo).
+   */
   const gridItems = useMemo(() => {
     if (!days.length) return [];
-    const firstDayWeekday = getWeekDayFromLocalDate(days[0].date); // 0..6
-    const padding = Array.from({ length: firstDayWeekday }, () => null);
+
+    const firstNativeWd = getWeekDayFromLocalDate(days[0].date); // Dom=0..Sab=6
+    const firstWdMondayFirst = toMondayFirstIndex(firstNativeWd); // Lun=0..Dom=6
+
+    const padding = Array.from({ length: firstWdMondayFirst }, () => null);
     return [...padding, ...days];
   }, [days]);
 
@@ -95,6 +109,16 @@ export default function MonthlyCalendar({
     ];
     return `${months[month - 1]} ${year}`;
   }, [year, month]);
+
+  /**
+   * ✅ FIX del “último día gigante”
+   * Con FlatList numColumns=7, si tu celda usa `flex: 1`,
+   * la última fila (con menos ítems) estira esos ítems.
+   *
+   * Solución: dar ancho fijo por columna usando porcentaje,
+   * y NO usar flex: 1 en el wrapper.
+   */
+  const cellWrapperStyle = { width: `${100 / 7}%`, padding: 6 } as const;
 
   return (
     <View style={{ gap: 12 }}>
@@ -129,12 +153,16 @@ export default function MonthlyCalendar({
         </Pressable>
       </View>
 
-      {/* Weekday labels */}
+      {/* Weekday labels (L -> D) */}
       <View style={{ flexDirection: "row" }}>
         {WEEKDAYS.map((w, index) => (
           <View
             key={`weekday-${index}-${w}`}
-            style={{ flex: 1, alignItems: "center", paddingVertical: 6 }}
+            style={{
+              width: `${100 / 7}%`,
+              alignItems: "center",
+              paddingVertical: 6,
+            }}
           >
             <Text style={{ color: colors.text, fontWeight: "900" }}>{w}</Text>
           </View>
@@ -150,7 +178,7 @@ export default function MonthlyCalendar({
         renderItem={({ item }) => {
           // PADDING CELL
           if (!item) {
-            return <View style={{ flex: 1, aspectRatio: 1, padding: 6 }} />;
+            return <View style={cellWrapperStyle} />;
           }
 
           const isToday = item.date === today;
@@ -168,16 +196,15 @@ export default function MonthlyCalendar({
               ? colors.danger
               : isUnscheduled(item.state)
               ? colors.border
-              : colors.border; // ✅ borde sutil para mantener el grid
+              : "transparent";
 
-          const borderWidth = item.state === "done" ? 0 : 1; // ✅ 1 para missed/unscheduled/future/normal
+          const borderWidth = 1;
 
           const allowToggle = !!onPressDay && isToggleAllowed(item.state);
 
           return (
-            <View style={{ flex: 1, aspectRatio: 1, padding: 6 }}>
+            <View style={cellWrapperStyle}>
               <Pressable
-                // ✅ IMPORTANTE: NO usar disabled aquí, porque si no, no hay toast.
                 onPress={() => {
                   if (allowToggle) {
                     onPressDay?.(item.date);
@@ -186,16 +213,16 @@ export default function MonthlyCalendar({
                   onBlockedPress?.({ date: item.date, state: item.state });
                 }}
                 style={{
-                  flex: 1,
+                  width: "100%",
+                  aspectRatio: 1, // ✅ cuadrado pero sin “flex: 1” (no se estira en última fila)
                   borderRadius: 14,
                   alignItems: "center",
                   justifyContent: "center",
                   backgroundColor: bg,
                   borderColor,
                   borderWidth,
-                  ...(isUnscheduled(item.state) && {
-                    borderStyle: "dashed",
-                  }),
+                  ...base,
+                  ...(isUnscheduled(item.state) && { borderStyle: "dashed" }),
                 }}
               >
                 <Text
@@ -213,7 +240,6 @@ export default function MonthlyCalendar({
                   {item.dayOfMonth}
                 </Text>
 
-                {/* dot opcional para done */}
                 {item.state === "done" ? (
                   <View
                     style={{
