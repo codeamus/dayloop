@@ -99,8 +99,8 @@ const pillStyle =
         backgroundColor: "rgba(239,68,68,0.14)", // danger suave
       }
     : {
-        borderColor: colors.border,
-        backgroundColor: colors.surfaceOverlay, // 🔥 mismo que cards
+        borderColor: colors.primary,
+        backgroundColor: colors.text, // 🔥 mismo que cards
       };
 
 
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   text: {
-    color: colors.text,
+    color: colors.surfaceAlt,
     fontWeight: "900",
     textAlign: "center",
   },
