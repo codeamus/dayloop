@@ -5,6 +5,7 @@ import type {
 } from "@/domain/services/NotificationScheduler";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { buildHabitNotificationText } from "./notificationCopy";
 
 function parseHHmm(hhmm: string) {
   const [h, m] = hhmm.split(":").map(Number);
@@ -43,8 +44,8 @@ export class ExpoNotificationScheduler implements NotificationScheduler {
     const t = applyOffset(hour, minute, offset);
 
     const content: Notifications.NotificationContentInput = {
-      title: "Dayloop",
-      body: `${plan.icon} ${plan.name}`,
+      title: "Tu hábito de hoy",
+      body: buildHabitNotificationText(plan.icon, plan.name),
       data: { habitId: plan.habitId },
       sound: Platform.OS === "ios" ? "default" : undefined,
     };
