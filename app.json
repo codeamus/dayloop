@@ -8,6 +8,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "icon": "./assets/icons/adaptive-icon.png",
+    "notification": {
+      "icon": "./assets/icons/adaptive-icon.png",
+      "color": "#2b3e4a"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.codeamus.dayloop",
