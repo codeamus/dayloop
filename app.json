@@ -7,7 +7,7 @@
     "scheme": "dayloop",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icons/adaptive-icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.codeamus.dayloop",
@@ -65,8 +65,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e6d4f38d-e7bc-4b5d-a1db-f12faee449fb"
+        "projectId": "9bfb370d-15bf-43f9-86d8-f450b4090343"
       }
-    }
+    },
+    "owner": "codeamus"
   }
 }
