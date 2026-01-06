@@ -5,13 +5,88 @@ import type { HabitLogRepository } from "@/domain/repositories/HabitLogRepositor
 import { randomUUID } from "expo-crypto";
 import { db } from "./database";
 
+/**
+ * SQLite HabitLogRepository
+ * Tabla esperada: habit_logs(id TEXT, habit_id TEXT, date TEXT, done INTEGER)
+ *
+ * Notas:
+ * - date se guarda como "YYYY-MM-DD" (string)
+ * - done se guarda como 0/1
+ */
 export class SqliteHabitLogRepository implements HabitLogRepository {
-  getLogsForHabitSince(habitId: HabitId, fromDate: string): Promise<HabitLog[]> {
-    throw new Error("Method not implemented.");
+  /**
+   * Logs de un hábito desde cierta fecha (inclusive).
+   * Útil para cálculos mensuales/rachas sin traer todo el historial.
+   */
+  async getLogsForHabitSince(
+    habitId: HabitId,
+    fromDate: string
+  ): Promise<HabitLog[]> {
+    const rows = db.getAllSync<{
+      id: string;
+      habit_id: string;
+      date: string;
+      done: number;
+    }>(
+      `
+      SELECT * FROM habit_logs
+      WHERE habit_id = ? AND date >= ?
+      ORDER BY date ASC
+    `,
+      [habitId, fromDate]
+    );
+
+    return rows.map((r) => ({
+      id: r.id,
+      habitId: r.habit_id,
+      date: r.date,
+      done: Boolean(r.done),
+    }));
   }
-  upsertLog(habitId: HabitId, date: string, done: boolean): Promise<void> {
-    throw new Error("Method not implemented.");
+
+  /**
+   * Upsert determinístico:
+   * - Si existe (habit_id + date), actualiza done
+   * - Si no existe, inserta
+   *
+   * Esto es clave para "toggle por fecha" y para sincronizar UI mensual.
+   */
+  async upsertLog(
+    habitId: HabitId,
+    date: string,
+    done: boolean
+  ): Promise<void> {
+    const row = db.getFirstSync<{
+      id: string;
+      done: number;
+    }>("SELECT id, done FROM habit_logs WHERE habit_id = ? AND date = ?", [
+      habitId,
+      date,
+    ]);
+
+    const doneInt = done ? 1 : 0;
+
+    if (!row) {
+      db.runSync(
+        `
+        INSERT INTO habit_logs (id, habit_id, date, done)
+        VALUES (?, ?, ?, ?)
+      `,
+        [randomUUID(), habitId, date, doneInt]
+      );
+      return;
+    }
+
+    db.runSync(
+      `
+      UPDATE habit_logs
+      SET done = ?
+      WHERE id = ?
+    `,
+      [doneInt, row.id]
+    );
   }
+
   async getLogsForDate(date: string): Promise<HabitLog[]> {
     const rows = db.getAllSync<{
       id: string;
@@ -29,10 +104,12 @@ export class SqliteHabitLogRepository implements HabitLogRepository {
   }
 
   async getLogsForHabit(habitId: HabitId): Promise<HabitLog[]> {
-    const rows = db.getAllSync<any>(
-      "SELECT * FROM habit_logs WHERE habit_id = ?",
-      [habitId]
-    );
+    const rows = db.getAllSync<{
+      id: string;
+      habit_id: string;
+      date: string;
+      done: number;
+    }>("SELECT * FROM habit_logs WHERE habit_id = ?", [habitId]);
 
     return rows.map((r) => ({
       id: r.id,
@@ -42,11 +119,19 @@ export class SqliteHabitLogRepository implements HabitLogRepository {
     }));
   }
 
+  /**
+   * Toggle legacy (lo mantengo intacto)
+   * - Si no existe, inserta done=1
+   * - Si existe, invierte done
+   */
   async toggle(habitId: HabitId, date: string): Promise<void> {
-    const row = db.getFirstSync<any>(
-      "SELECT * FROM habit_logs WHERE habit_id = ? AND date = ?",
-      [habitId, date]
-    );
+    const row = db.getFirstSync<{
+      id: string;
+      done: number;
+    }>("SELECT * FROM habit_logs WHERE habit_id = ? AND date = ?", [
+      habitId,
+      date,
+    ]);
 
     if (!row) {
       db.runSync(

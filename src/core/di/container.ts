@@ -9,6 +9,7 @@ import { GetHabitMonthlyStats } from "@/domain/usecases/GetHabitMonthlyStats"; /
 import { GetHabitStreaks } from "@/domain/usecases/GetHabitStreaks";
 import { GetTodayHabits } from "@/domain/usecases/GetTodayHabits";
 import { GetWeeklySummary } from "@/domain/usecases/GetWeeklySummary";
+import { ToggleHabitForDate } from "@/domain/usecases/ToggleHabitForDate";
 import { ToggleHabitForToday } from "@/domain/usecases/ToggleHabitForToday";
 import { UpdateHabit } from "@/domain/usecases/UpdateHabit";
 
@@ -39,6 +40,10 @@ class Container {
     this.habitLogRepository
   );
 
+  toggleHabitForDate = new ToggleHabitForDate(
+    this.habitRepository,
+    this.habitLogRepository
+  );
   // CRUD
   createHabit = new CreateHabit(this.habitRepository);
   getAllHabits = new GetAllHabits(this.habitRepository);

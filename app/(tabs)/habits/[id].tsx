@@ -6,12 +6,14 @@ import { Screen } from "@/presentation/components/Screen";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitMonthlyStats } from "@/presentation/hooks/useHabitMonthlyStats";
 import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
+import { useToggleHabitForDate } from "@/presentation/hooks/useToggleHabitForDate";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -109,6 +111,8 @@ export default function EditHabitScreen() {
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
+
+  const { toggle: toggleForDate } = useToggleHabitForDate(habitId);
 
   useEffect(() => {
     if (!habitId) return;
@@ -436,6 +440,20 @@ export default function EditHabitScreen() {
                 days={monthlyStats.days}
                 onPrevMonth={prevMonth}
                 onNextMonth={nextMonth}
+                onPressDay={async (date) => {
+                  // 🔔 Haptic sutil (cross-platform)
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(
+                    () => null
+                  );
+
+                  await toggleForDate(date);
+
+                  // refrescos
+                  await refreshMonthly();
+                  await container.getHabitStreaks
+                    .execute(habitId)
+                    .catch(() => null);
+                }}
               />
             </>
           )}
