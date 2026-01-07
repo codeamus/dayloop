@@ -1,4 +1,8 @@
-name: Create development builds
+name: Develop - Create development builds
+
+on:
+  push:
+    branches: ["develop"]
 
 jobs:
   android_development_build:

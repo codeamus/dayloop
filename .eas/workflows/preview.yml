@@ -1,0 +1,36 @@
+name: Preview - Build and submit to TestFlight + Google Play (Internal)
+
+on:
+  push:
+    branches: ["preview"]
+
+jobs:
+  build_android_preview:
+    name: Build Android (preview - store)
+    type: build
+    params:
+      platform: android
+      profile: preview
+
+  submit_android_preview:
+    name: Submit Android (preview)
+    needs: [build_android_preview]
+    type: submit
+    params:
+      build_id: ${{ needs.build_android_preview.outputs.build_id }}
+      profile: preview
+
+  build_ios_preview:
+    name: Build iOS (preview - store)
+    type: build
+    params:
+      platform: ios
+      profile: preview
+
+  submit_ios_preview:
+    name: Submit iOS (preview)
+    needs: [build_ios_preview]
+    type: submit
+    params:
+      build_id: ${{ needs.build_ios_preview.outputs.build_id }}
+      profile: preview
