@@ -27,7 +27,8 @@ function uniqueSortedNumbers(xs: unknown): number[] {
 
 function getTimeOfDayFromHour(startTime: unknown): TimeOfDay {
   if (typeof startTime !== "string") return "morning";
-  const h = Number(startTime.split(":")[0]);
+  const hPart = startTime.split(":")[0];
+  const h = Number(hPart);
   if (!Number.isFinite(h)) return "morning";
   if (h < 12) return "morning";
   if (h < 18) return "afternoon";
@@ -36,19 +37,27 @@ function getTimeOfDayFromHour(startTime: unknown): TimeOfDay {
 
 function todayISO(): string {
   const d = new Date();
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getDayOfWeekFromLocalDate(date: unknown): number {
   const s = safeString(date, todayISO());
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y || 2000, (m || 1) - 1, d || 1).getDay();
+  const [yy, mm, dd] = s.split("-").map(Number);
+  const y = Number.isFinite(yy) ? yy : 2000;
+  const m = Number.isFinite(mm) ? mm : 1;
+  const d = Number.isFinite(dd) ? dd : 1;
+  const dt = new Date(y, m - 1, d);
+  return dt.getDay(); // 0..6
 }
 
 function getDayOfMonthFromLocalDate(date: unknown): number {
   const s = safeString(date, todayISO());
-  const d = Number(s.split("-")[2]);
-  return Number.isFinite(d) ? d : new Date().getDate();
+  const parts = s.split("-").map(Number);
+  const dd = parts[2];
+  return Number.isFinite(dd) ? dd : new Date().getDate();
 }
 
 export class CreateHabit {
@@ -73,48 +82,52 @@ export class CreateHabit {
       const name = safeString(input.name, "").trim();
       if (!name) return { ok: false };
 
-      const habitId = newId();
+      const icon = safeString(input.icon, "🔥");
+      const color = safeString(input.color, "#e6bc01");
 
       const startTime = safeHHmm(input.startTime, "08:00");
       const endTime = safeHHmm(input.endTime, "08:30");
       const timeOfDay = getTimeOfDayFromHour(startTime);
 
       const reminderOffsetMinutes =
-        input.reminderOffsetMinutes == null
+        input.reminderOffsetMinutes === null ||
+        input.reminderOffsetMinutes === undefined
           ? null
           : Number(input.reminderOffsetMinutes);
 
+      const type = input.type ?? "daily";
+
       let schedule: HabitSchedule;
 
-      if (input.type === "weekly") {
+      if (type === "weekly") {
         const days = uniqueSortedNumbers(input.weeklyDays).filter(
           (d) => d >= 0 && d <= 6
         );
+        const fallbackDay = getDayOfWeekFromLocalDate(input.date);
         schedule = {
           type: "weekly",
-          daysOfWeek: days.length
-            ? days
-            : [getDayOfWeekFromLocalDate(input.date)],
+          daysOfWeek: days.length ? days : [fallbackDay],
         };
-      } else if (input.type === "monthly") {
+      } else if (type === "monthly") {
         const days = uniqueSortedNumbers(input.monthDays).filter(
           (d) => d >= 1 && d <= 31
         );
+        const fallbackDay = getDayOfMonthFromLocalDate(input.date);
         schedule = {
           type: "monthly",
-          daysOfMonth: days.length
-            ? days
-            : [getDayOfMonthFromLocalDate(input.date)],
+          daysOfMonth: days.length ? days : [fallbackDay],
         };
       } else {
         schedule = { type: "daily" };
       }
 
+      const habitId = newId();
+
       const habit: Habit = {
         id: habitId,
         name,
-        icon: safeString(input.icon, "🔥"),
-        color: safeString(input.color, "#e6bc01"),
+        icon,
+        color,
         schedule,
         startTime,
         endTime,
@@ -125,25 +138,30 @@ export class CreateHabit {
           : null,
         calendarEventId: null,
         endCondition: { type: "none" },
+
         notificationIds: [],
+        isPaused: false,
+        pausedAt: null,
+        pauseReason: null,
       };
 
-      // 1) Guardar hábito
       await this.habitRepository.create(habit);
 
-      // 2) Programar notificaciones
       const plan: HabitNotificationPlan = {
         habitId,
         name,
-        icon: habit.icon,
+        icon,
         startTime,
         schedule: schedule as any,
-        reminderOffsetMinutes: habit.reminderOffsetMinutes,
+        reminderOffsetMinutes: habit.reminderOffsetMinutes ?? null,
       };
 
-      const ids = await this.notificationScheduler.scheduleForHabit(plan);
+      // ✅ NO dispara ahora al crear (solo agenda)
+      const ids = await this.notificationScheduler.scheduleForHabit(plan, {
+        horizonDays: 30,
+      });
 
-      // 3) Persistir IDs
+
       habit.notificationIds = ids;
       await this.habitRepository.updateNotifications(habitId, ids);
 

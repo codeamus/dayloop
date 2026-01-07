@@ -1,154 +1,178 @@
 // src/infraestructure/notifications/ExpoNotificationScheduler.ts
-
 import type {
   HabitNotificationPlan,
   NotificationScheduler,
 } from "@/domain/services/NotificationScheduler";
 import * as Notifications from "expo-notifications";
 
-/**
- * Helpers fechas (local) + parsing hora "HH:mm"
- */
-function parseHM(hm: string): { hour: number; minute: number } {
-  const [h, m] = (hm ?? "").split(":").map((v) => Number(v));
+function parseHHmm(s: string): { h: number; m: number } {
+  const [hh, mm] = (s ?? "").split(":").map((x) => Number(x));
   return {
-    hour: Number.isFinite(h) ? h : 9,
-    minute: Number.isFinite(m) ? m : 0,
+    h: Number.isFinite(hh) ? hh : 8,
+    m: Number.isFinite(mm) ? mm : 0,
   };
 }
 
-/**
- * Aplica offset en minutos a una hora HH:mm.
- * Devuelve {hour, minute} ya normalizado (0..23 / 0..59).
- */
-function applyOffsetToHM(
-  hm: string,
-  offsetMinutes: number | null
-): { hour: number; minute: number } {
-  const { hour, minute } = parseHM(hm);
-  const base = hour * 60 + minute;
-  const off = Number.isFinite(offsetMinutes as number)
-    ? (offsetMinutes as number)
-    : 0;
+function toMinutes(h: number, m: number) {
+  return h * 60 + m;
+}
 
-  let total = base - off;
-  // normaliza en rango 0..1439
-  total = ((total % 1440) + 1440) % 1440;
+function clampDayMinute(total: number) {
+  let x = total % 1440;
+  if (x < 0) x += 1440;
+  return x;
+}
 
-  return { hour: Math.floor(total / 60), minute: total % 60 };
+function buildTitle(plan: HabitNotificationPlan) {
+  return `${plan.icon} ${plan.name}`;
+}
+
+function buildBody(_plan: HabitNotificationPlan) {
+  return "Hora de tu hábito 💛";
+}
+
+function computeReminderHM(plan: HabitNotificationPlan) {
+  const { h, m } = parseHHmm(plan.startTime);
+  const base = toMinutes(h, m);
+
+  const offset =
+    typeof plan.reminderOffsetMinutes === "number" &&
+    Number.isFinite(plan.reminderOffsetMinutes)
+      ? plan.reminderOffsetMinutes
+      : 0;
+
+  const reminderMin = clampDayMinute(base - offset);
+  return {
+    hour: Math.floor(reminderMin / 60),
+    minute: reminderMin % 60,
+  };
+}
+
+function addDays(d: Date, days: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+}
+
+function startOfToday(d = new Date()) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function isValidDate(x: Date) {
+  return x instanceof Date && !Number.isNaN(x.getTime());
+}
+
+function nextOccurrences(plan: HabitNotificationPlan, horizonDays: number) {
+  const now = new Date();
+  const minFuture = new Date(now.getTime() + 60 * 1000); // >= 60s al futuro
+
+  const { hour, minute } = computeReminderHM(plan);
+
+  const out: Date[] = [];
+  const base = startOfToday(now);
+
+  const pushIfFuture = (d: Date) => {
+    if (!isValidDate(d)) return;
+    if (d.getTime() >= minFuture.getTime()) out.push(d);
+  };
+
+  if (plan.schedule.type === "daily") {
+    for (let i = 0; i <= horizonDays; i++) {
+      const d = addDays(base, i);
+      d.setHours(hour, minute, 0, 0);
+      pushIfFuture(d);
+    }
+    return out;
+  }
+
+  if (plan.schedule.type === "weekly") {
+    const days = Array.isArray(plan.schedule.daysOfWeek)
+      ? plan.schedule.daysOfWeek
+      : [];
+    const set = new Set(
+      days
+        .map((x) => Math.trunc(Number(x)))
+        .filter((x) => Number.isFinite(x) && x >= 0 && x <= 6)
+    );
+    if (!set.size) return out;
+
+    for (let i = 0; i <= horizonDays; i++) {
+      const d = addDays(base, i);
+      const dow = d.getDay(); // 0..6
+      if (!set.has(dow)) continue;
+      d.setHours(hour, minute, 0, 0);
+      pushIfFuture(d);
+    }
+    return out;
+  }
+
+  if (plan.schedule.type === "monthly") {
+    const days = Array.isArray(plan.schedule.daysOfMonth)
+      ? plan.schedule.daysOfMonth
+      : [];
+    const set = new Set(
+      days
+        .map((x) => Math.trunc(Number(x)))
+        .filter((x) => Number.isFinite(x) && x >= 1 && x <= 31)
+    );
+    if (!set.size) return out;
+
+    for (let i = 0; i <= horizonDays; i++) {
+      const d = addDays(base, i);
+      const dom = d.getDate(); // 1..31
+      if (!set.has(dom)) continue;
+      d.setHours(hour, minute, 0, 0);
+      pushIfFuture(d);
+    }
+    return out;
+  }
+
+  return out;
 }
 
 export class ExpoNotificationScheduler implements NotificationScheduler {
-  /**
-   * Programa notificaciones recurrentes según el plan.
-   * IMPORTANTÍSIMO: siempre agrega data.habitId para poder cancelar por hábito.
-   */
-  async scheduleForHabit(plan: HabitNotificationPlan): Promise<string[]> {
+  async cancel(notificationIds: string[]): Promise<void> {
+    const ids = (notificationIds ?? []).filter((x) => typeof x === "string");
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        } catch {
+          // ignore
+        }
+      })
+    );
+  }
+
+  async scheduleForHabit(
+    plan: HabitNotificationPlan,
+    options?: { horizonDays?: number }
+  ): Promise<string[]> {
+    const horizonDays =
+      typeof options?.horizonDays === "number" &&
+      Number.isFinite(options.horizonDays)
+        ? Math.max(1, Math.min(365, Math.trunc(options.horizonDays)))
+        : 30;
+
+    const dates = nextOccurrences(plan, horizonDays);
     const ids: string[] = [];
 
-    const time = applyOffsetToHM(plan.startTime, plan.reminderOffsetMinutes);
-
-    // Contenido base
-    const content: Notifications.NotificationContentInput = {
-      title: plan.name,
-      body: "Recordatorio de hábito",
-      sound: true,
-      data: { habitId: plan.habitId }, // ✅ CLAVE
-    };
-
-    if (plan.schedule.type === "daily") {
+    for (const date of dates) {
       const id = await Notifications.scheduleNotificationAsync({
-        content,
-        trigger: {
-          hour: time.hour,
-          minute: time.minute,
-          repeats: true,
-        } as Notifications.DailyTriggerInput,
+        content: {
+          title: buildTitle(plan),
+          body: buildBody(plan),
+          data: { habitId: plan.habitId, kind: "habit_reminder" },
+        },
+        // ✅ nuevo formato (sin warning)
+        trigger: { type: "date", date },
       });
+
       ids.push(id);
-      return ids;
-    }
-
-    if (plan.schedule.type === "weekly") {
-      const days = Array.isArray(plan.schedule.daysOfWeek)
-        ? plan.schedule.daysOfWeek
-        : [];
-
-      // expo usa weekday 1-7 (1=Sunday ... 7=Saturday)
-      // tu dominio usa 0-6 (0=Domingo ... 6=Sábado)
-      const toExpoWeekday = (d0to6: number) => {
-        const d = Number(d0to6);
-        if (!Number.isFinite(d)) return 1;
-        return d === 0 ? 1 : d + 1;
-      };
-
-      const unique = Array.from(new Set(days)).filter((d) => d >= 0 && d <= 6);
-
-      for (const d of unique) {
-        const id = await Notifications.scheduleNotificationAsync({
-          content,
-          trigger: {
-            weekday: toExpoWeekday(d),
-            hour: time.hour,
-            minute: time.minute,
-            repeats: true,
-          } as Notifications.WeeklyTriggerInput,
-        });
-        ids.push(id);
-      }
-
-      return ids;
-    }
-
-    if (plan.schedule.type === "monthly") {
-      const days = Array.isArray(plan.schedule.daysOfMonth)
-        ? plan.schedule.daysOfMonth
-        : [];
-
-      const unique = Array.from(new Set(days)).filter((d) => d >= 1 && d <= 31);
-
-      for (const day of unique) {
-        const id = await Notifications.scheduleNotificationAsync({
-          content,
-          // MonthlyTriggerInput (day: 1-31)
-          trigger: {
-            day,
-            hour: time.hour,
-            minute: time.minute,
-            repeats: true,
-          } as any,
-        });
-
-        ids.push(id);
-      }
-
-      return ids;
     }
 
     return ids;
-  }
-
-  async cancel(notificationIds: string[]): Promise<void> {
-    const ids = Array.isArray(notificationIds) ? notificationIds : [];
-    await Promise.all(
-      ids.map((id) => Notifications.cancelScheduledNotificationAsync(id))
-    );
-  }
-
-  /**
-   * ✅ Robusto: cancela todas las notificaciones programadas cuyo data.habitId === habitId
-   */
-  async cancelByHabitId(habitId: string): Promise<void> {
-    const all = await Notifications.getAllScheduledNotificationsAsync();
-
-    const toCancel = all
-      .filter((n) => (n?.content?.data as any)?.habitId === habitId)
-      .map((n) => n.identifier);
-
-    if (!toCancel.length) return;
-
-    await Promise.all(
-      toCancel.map((id) => Notifications.cancelScheduledNotificationAsync(id))
-    );
   }
 }

@@ -11,4 +11,10 @@ export interface HabitRepository {
 
   // ✅ persistir ids de notificaciones (JSON en SQLite)
   updateNotifications(id: HabitId, notificationIds: string[]): Promise<void>;
+  updatePauseState(params: {
+    id: HabitId;
+    isPaused: boolean;
+    pausedAt: string | null;
+    pauseReason: string | null;
+  }): Promise<void>;
 }
