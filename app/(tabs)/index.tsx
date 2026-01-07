@@ -12,9 +12,8 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  View,
+  View
 } from "react-native";
 
 type FrequencyTab = "daily" | "weekly" | "monthly";
@@ -334,7 +333,7 @@ export default function TodayScreen() {
               )}
             </View>
 
-            <Switch
+            {/* <Switch
               value={showFrequencyFilter}
               onValueChange={(v) => setShowFrequencyFilter(v)}
               trackColor={{
@@ -344,7 +343,7 @@ export default function TodayScreen() {
               thumbColor={
                 showFrequencyFilter ? colors.primary : "rgba(241,233,215,0.75)"
               }
-            />
+            /> */}
           </View>
 
           {/* Tabs SOLO si el toggle está activo */}
