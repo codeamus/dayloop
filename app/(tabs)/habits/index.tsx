@@ -615,10 +615,10 @@ const styles = StyleSheet.create({
   pillTextSoft: { color: colors.text },
 
   cardRight: {
+    flexDirection: "row",
     width: 56,
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignSelf: "stretch",
   },
   iconBubble: {
     width: 34,
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   cardIcon: { fontSize: 18 },
   cardChev: {
     color: "rgba(241,233,215,0.55)",
-    fontSize: 18,
+    fontSize: 32,
     fontWeight: "900",
   },
 
