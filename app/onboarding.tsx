@@ -1,17 +1,32 @@
 // app/onboarding.tsx
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 
 import { setHasSeenOnboarding } from "@/core/settings/onboardingSettings";
 import { colors } from "@/theme/colors";
+
+const images = [
+  require("assets/onboarding/step-1.png"),
+  require("assets/onboarding/step-2.png"),
+  require("assets/onboarding/step-3.png"),
+];
 
 type Step = {
   title: string;
   body: string;
   primary: string;
   secondary?: string;
+  caption?: string;
   onPrimary?: () => Promise<void> | void;
   onSecondary?: () => Promise<void> | void;
 };
@@ -32,34 +47,85 @@ export default function OnboardingScreen() {
   const [stepIndex, setStepIndex] = useState(0);
   const [busy, setBusy] = useState(false);
 
+  // Animación: fade + slide
+  const opacity = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const animateTo = (direction: "next" | "prev", cb: () => void) => {
+    const outY = direction === "next" ? 10 : -10;
+
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 140,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: outY,
+          duration: 140,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.delay(20),
+    ]).start(() => {
+      cb();
+      translateY.setValue(-outY);
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 180,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  };
+
   const finish = async () => {
     await setHasSeenOnboarding(true);
-    router.replace("/"); // ✅ home real
+    router.replace("/");
+  };
+
+  const goNext = () => {
+    if (stepIndex >= 2) return;
+    animateTo("next", () => setStepIndex((v) => v + 1));
   };
 
   const steps: Step[] = useMemo(
     () => [
       {
         title: "Crea hábitos sin presión",
-        body: "Dayloop te ayuda a construir hábitos diarios de forma simple y constante.",
+        body: "Dayloop te ayuda a construir hábitos diarios de forma simple y constante, sin complicarte.",
+        caption: "Consejo: mantén un objetivo simple por semana.",
         primary: "Continuar",
-        onPrimary: () => setStepIndex(1),
+        onPrimary: goNext,
       },
       {
-        title: "Marca, repite, progresa",
-        body: "Crea hábitos, márcalos como completados y mantén tu constancia día a día.",
+        title: "Marca y sigue tu progreso",
+        body: "Completa tus hábitos día a día y mira tu avance con estadísticas claras y rachas.",
+        caption: "Pequeños pasos → progreso real.",
         primary: "Continuar",
-        onPrimary: () => setStepIndex(2),
+        onPrimary: goNext,
       },
       {
-        title: "Recordatorios que te ayudan",
+        title: "Recordatorios que sí ayudan",
         body: "Activa notificaciones para recibir recordatorios en los horarios que tú elijas.",
+        caption: "Tú controlas el horario.",
         primary: "Activar recordatorios",
         secondary: "Ahora no",
         onPrimary: async () => {
           if (busy) return;
           setBusy(true);
-          await requestNotifPermissionSafe(); // ✅ sin hook (sin loops)
+          await requestNotifPermissionSafe();
           await finish();
         },
         onSecondary: async () => {
@@ -69,27 +135,64 @@ export default function OnboardingScreen() {
         },
       },
     ],
-    [busy]
+    [busy, stepIndex]
   );
 
   const step = steps[stepIndex];
 
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: colors.bg,
-        padding: 24,
-        justifyContent: "space-between",
-      }}
-    >
-      <View style={{ marginTop: 56 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Header */}
+      <View style={{ paddingTop: 44, paddingHorizontal: 20 }}>
         <Text
           style={{
-            fontSize: 28,
-            fontWeight: "700",
-            marginBottom: 12,
-            color: "white",
+            color: colors.mutedText,
+            fontSize: 12,
+            letterSpacing: 1,
+            textTransform: "uppercase",
+          }}
+        >
+          DAYLOOP
+        </Text>
+
+        {/* Progress bar */}
+        <View
+          style={{
+            marginTop: 10,
+            height: 5,
+            borderRadius: 999,
+            backgroundColor: colors.border,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              width: `${((stepIndex + 1) / 3) * 100}%`,
+              height: 5,
+              borderRadius: 999,
+              backgroundColor: colors.primary,
+            }}
+          />
+        </View>
+      </View>
+
+      {/* Content (animated) */}
+      <Animated.View
+        style={{
+          flex: 1,
+          paddingHorizontal: 20,
+          paddingTop: 14,
+          opacity,
+          transform: [{ translateY }],
+        }}
+      >
+        <Text
+          style={{
+            color: colors.text,
+            fontSize: 30,
+            fontWeight: "800",
+            lineHeight: 34,
+            marginTop: 10,
           }}
         >
           {step.title}
@@ -97,44 +200,119 @@ export default function OnboardingScreen() {
 
         <Text
           style={{
+            color: colors.mutedText,
             fontSize: 16,
-            opacity: 0.82,
             lineHeight: 22,
-            color: "white",
+            marginTop: 10,
           }}
         >
           {step.body}
         </Text>
 
+        {/* Card imagen (SIN doble marco, estilo "premium") */}
         <View
           style={{
-            marginTop: 28,
-            height: 260,
-            borderRadius: 20,
-            backgroundColor: "rgba(255,255,255,0.06)",
+            marginTop: 22,
+            borderRadius: 24,
+            backgroundColor: colors.surface,
+            overflow: "hidden",
             borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.10)",
+            borderColor: colors.border,
           }}
-        />
-      </View>
+        >
+          <View style={{ height: 320, backgroundColor: colors.surfaceAlt }}>
+            <Image
+              source={images[stepIndex]}
+              resizeMode="cover" // ✅ integra mejor que contain
+              style={{ width: "100%", height: "100%" }}
+            />
 
-      <View style={{ gap: 12, marginBottom: 18 }}>
+            {/* Overlay suave para integrar con dark theme */}
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 120,
+                backgroundColor: "rgba(43,62,74,0.45)", // approx colors.bg
+              }}
+            />
+
+            {/* Caption sobre overlay */}
+            <View
+              style={{
+                position: "absolute",
+                left: 14,
+                right: 14,
+                bottom: 12,
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                borderRadius: 14,
+                backgroundColor: colors.surfaceOverlay,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.06)",
+              }}
+            >
+              <Text
+                style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}
+              >
+                {step.caption}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Dots */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 8,
+            marginTop: 14,
+          }}
+        >
+          {[0, 1, 2].map((i) => (
+            <View
+              key={i}
+              style={{
+                width: i === stepIndex ? 18 : 8,
+                height: 8,
+                borderRadius: 999,
+                backgroundColor:
+                  i === stepIndex ? colors.primary : colors.divider,
+                opacity: i === stepIndex ? 1 : 0.6,
+              }}
+            />
+          ))}
+        </View>
+      </Animated.View>
+
+      {/* Footer buttons */}
+      <View style={{ paddingHorizontal: 20, paddingBottom: 18, gap: 12 }}>
         <Pressable
           disabled={busy}
           onPress={step.onPrimary}
           style={{
-            height: 52,
-            borderRadius: 14,
+            height: 54,
+            borderRadius: 16,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "white",
+            backgroundColor: colors.primary,
             opacity: busy ? 0.7 : 1,
           }}
         >
           {busy ? (
             <ActivityIndicator />
           ) : (
-            <Text style={{ fontSize: 16, fontWeight: "700", color: "black" }}>
+            <Text
+              style={{
+                color: colors.primaryText,
+                fontSize: 16,
+                fontWeight: "900",
+              }}
+            >
               {step.primary}
             </Text>
           )}
@@ -145,38 +323,47 @@ export default function OnboardingScreen() {
             disabled={busy}
             onPress={step.onSecondary}
             style={{
-              height: 52,
-              borderRadius: 14,
+              height: 54,
+              borderRadius: 16,
               alignItems: "center",
               justifyContent: "center",
-              backgroundColor: "transparent",
               borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.18)",
+              borderColor: colors.border,
+              backgroundColor: "transparent",
               opacity: busy ? 0.7 : 1,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "600", color: "white" }}>
+            <Text
+              style={{ color: colors.text, fontSize: 15, fontWeight: "800" }}
+            >
               {step.secondary}
             </Text>
           </Pressable>
-        ) : null}
-
-        <View
-          style={{ flexDirection: "row", justifyContent: "center", gap: 6 }}
-        >
-          {[0, 1, 2].map((i) => (
-            <View
-              key={i}
+        ) : (
+          <Pressable
+            disabled={busy}
+            onPress={finish}
+            style={{
+              height: 54,
+              borderRadius: 16,
+              alignItems: "center",
+              justifyContent: "center",
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: "transparent",
+            }}
+          >
+            <Text
               style={{
-                width: i === stepIndex ? 18 : 8,
-                height: 8,
-                borderRadius: 999,
-                backgroundColor: "rgba(255,255,255,0.75)",
-                opacity: i === stepIndex ? 1 : 0.35,
+                color: colors.mutedText,
+                fontSize: 15,
+                fontWeight: "800",
               }}
-            />
-          ))}
-        </View>
+            >
+              Omitir
+            </Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );
