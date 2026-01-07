@@ -1,0 +1,14 @@
+name: Publish preview update
+
+on:
+  push:
+    branches:
+      - "develop"
+      - "preview/**"
+
+jobs:
+  publish_preview_update:
+    name: Publish preview OTA update
+    type: update
+    params:
+      branch: ${{ github.ref_name }}
