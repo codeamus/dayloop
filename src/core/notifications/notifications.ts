@@ -4,23 +4,19 @@ import Constants from "expo-constants";
 import type * as NotificationsType from "expo-notifications";
 import { Platform } from "react-native";
 
-// Expo Go Android: limitaciones
-const isExpoGoAndroid =
-  Platform.OS === "android" && Constants.appOwnership === "expo";
+// Expo Go Android: limitaciones (y en general Expo Go)
+const isExpoGo =
+  (Platform.OS === "android" || Platform.OS === "ios") &&
+  Constants.appOwnership === "expo";
 
-// Instancia real
+// Instancia real (solo fuera de Expo Go)
 let Notifications: typeof NotificationsType | null = null;
 
-if (!isExpoGoAndroid) {
+if (!isExpoGo) {
   Notifications = require("expo-notifications");
 }
 
-function assertNotifications() {
-  if (!Notifications) {
-    throw new Error(
-      "[notifications] expo-notifications no está disponible en este entorno (probablemente Expo Go en Android)."
-    );
-  }
+function getNotifsOrNull() {
   return Notifications;
 }
 
@@ -28,47 +24,68 @@ function assertNotifications() {
 const DAILY_ID = "daily-summary";
 
 // ==========================
-// Config global
+// Config global (idempotente)
 // ==========================
+let didInitConfig = false;
+
 export function initNotificationsConfig() {
-  if (isExpoGoAndroid) return;
+  if (isExpoGo) return;
+  if (didInitConfig) return;
 
-  const Notifs = assertNotifications();
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return;
 
-  Notifs.setNotificationHandler({
-    handleNotification: async () => ({
-      // foreground only
-      shouldPlaySound: false,
-      shouldSetBadge: false,
+  didInitConfig = true;
 
-      // SDK reciente
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+  try {
+    Notifs.setNotificationHandler({
+      handleNotification: async () => ({
+        // foreground only
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+
+        // SDK reciente
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (e) {
+    // en caso de compatibilidad de versión, no queremos romper la app
+    console.warn("[notifications] setNotificationHandler failed:", e);
+  }
 }
 
 // ==========================
 // Permisos
 // ==========================
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (isExpoGoAndroid) return false;
+  if (isExpoGo) return false;
 
-  const Notifs = assertNotifications();
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return false;
 
-  const perms = await Notifs.getPermissionsAsync();
-  if (perms.status === "granted") return true;
+  try {
+    const perms = await Notifs.getPermissionsAsync();
+    if (perms.status === "granted") return true;
 
-  const req = await Notifs.requestPermissionsAsync();
-  return req.status === "granted";
+    // Solo pedimos si no está granted
+    const req = await Notifs.requestPermissionsAsync();
+    return req.status === "granted";
+  } catch (e) {
+    console.warn("[notifications] request permission failed:", e);
+    return false;
+  }
 }
 
 // ==========================
 // Cancelación (por ID)
 // ==========================
 export async function cancelScheduledNotification(id: string) {
-  if (isExpoGoAndroid) return;
-  const Notifs = assertNotifications();
+  if (isExpoGo) return;
+
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return;
+
   try {
     await Notifs.cancelScheduledNotificationAsync(id);
   } catch {
@@ -84,9 +101,11 @@ export async function cancelDailyReminder() {
 // Recordatorio diario (resumen)
 // ==========================
 export async function scheduleDailyReminder(hour: number, minute: number) {
-  if (isExpoGoAndroid) return;
+  if (isExpoGo) return;
 
-  const Notifs = assertNotifications();
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return;
+
   const ok = await requestNotificationPermission();
   if (!ok) return;
 
@@ -113,12 +132,6 @@ export async function scheduleDailyReminder(hour: number, minute: number) {
 // ==========================
 // ❌ DEPRECATED: Recordatorio por hábito
 // ==========================
-//
-// Antes programaba recordatorios por hábito aquí, pero ahora eso lo hace
-// el NotificationScheduler (ExpoNotificationScheduler) y esto generaba duplicados.
-//
-// Si todavía hay un llamado perdido en el código a esta función, NO queremos
-// que programe nada.
 export async function scheduleHabitReminder(_options: {
   habitId: HabitId;
   habitName: string;
@@ -136,9 +149,11 @@ export async function scheduleHabitReminder(_options: {
 // Debug: notificación en X segundos
 // ==========================
 export async function scheduleDebugNotificationIn(seconds: number) {
-  if (isExpoGoAndroid) return;
+  if (isExpoGo) return;
 
-  const Notifs = assertNotifications();
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return;
+
   const ok = await requestNotificationPermission();
   if (!ok) return;
 
