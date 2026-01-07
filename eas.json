@@ -8,19 +8,27 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal",
+      "distribution": "store",
+      "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release"
       }
     },
     "production": {
       "distribution": "store",
+      "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release"
       }
     }
   },
   "submit": {
+    "preview": {
+      "android": {
+        "track": "internal"
+      },
+      "ios": {}
+    },
     "production": {
       "android": {
         "track": "production"

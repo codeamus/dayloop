@@ -1,0 +1,20 @@
+name: Develop - Create development builds
+
+on:
+  push:
+    branches: ["develop"]
+
+jobs:
+  android_development_build:
+    name: Build Android (development)
+    type: build
+    params:
+      platform: android
+      profile: development
+
+  ios_device_development_build:
+    name: Build iOS device (development)
+    type: build
+    params:
+      platform: ios
+      profile: development

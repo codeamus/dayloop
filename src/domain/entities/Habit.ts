@@ -1,12 +1,9 @@
 // src/domain/entities/Habit.ts
-
 export type HabitId = string;
 
 export type TimeOfDay = "morning" | "afternoon" | "evening";
 
-export type DailySchedule = {
-  type: "daily";
-};
+export type DailySchedule = { type: "daily" };
 
 export type WeeklySchedule = {
   type: "weekly";
@@ -22,7 +19,9 @@ export type HabitSchedule = DailySchedule | WeeklySchedule | MonthlySchedule;
 
 export type EndCondition =
   | { type: "none" }
-  | { type: "byDate"; endDate: string }; // "2025-01-10"
+  | { type: "byDate"; endDate: string }; // "YYYY-MM-DD"
+
+export type PauseReason = "manual" | "ended";
 
 export type Habit = {
   id: HabitId;
@@ -32,22 +31,20 @@ export type Habit = {
 
   schedule: HabitSchedule;
 
-  // ✅ NUEVO: condición de término
   endCondition?: EndCondition;
 
-  // 🧱 Bloque horario
   startTime: string; // "HH:mm"
   endTime: string; // "HH:mm"
 
-  // ⚠️ Legacy
-  time?: string;
-
+  time?: string; // legacy
   timeOfDay: TimeOfDay;
 
-  // 📅 Calendar
   calendarEventId?: string | null;
 
-  // 🔔 Notificaciones
   reminderOffsetMinutes?: number | null;
   notificationIds?: string[];
+
+  isPaused?: boolean;
+  pausedAt?: string | null; // "YYYY-MM-DD"
+  pauseReason?: PauseReason | null;
 };

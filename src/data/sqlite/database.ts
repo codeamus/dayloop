@@ -1,8 +1,9 @@
+// src/data/sqlite/database.ts
 import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
 
-const SCHEMA_VERSION = 4; // 👈 era 3
+const SCHEMA_VERSION = 5;
 
 export function initDatabase() {
   db.execSync(`
@@ -18,18 +19,23 @@ export function initDatabase() {
       end_condition TEXT,
       time_of_day TEXT,
 
-      -- LEGACY (no borrar aún)
+      -- LEGACY
       time TEXT,
 
-      -- NUEVO (bloques calendario)
+      -- Bloques
       start_time TEXT,
       end_time TEXT,
       calendar_event_id TEXT,
 
       reminder_offset_minutes INTEGER,
 
-      -- ✅ NUEVO: IDs de notificaciones programadas
-      notification_ids TEXT
+      -- Notifs
+      notification_ids TEXT,
+
+      -- ✅ Pausa
+      is_paused INTEGER,
+      paused_at TEXT,
+      pause_reason TEXT
     );
 
     CREATE TABLE IF NOT EXISTS habit_logs (
@@ -45,9 +51,6 @@ export function initDatabase() {
   migrateIfNeeded();
 }
 
-// ==========================
-// MIGRACIONES
-// ==========================
 function migrateIfNeeded() {
   const row = db.getFirstSync<{ user_version: number }>(`PRAGMA user_version;`);
   const user_version = row?.user_version ?? 0;
@@ -59,7 +62,8 @@ function migrateIfNeeded() {
   try {
     if (user_version < 2) migrateToV2();
     if (user_version < 3) migrateToV3();
-    if (user_version < 4) migrateToV4(); // ✅ nuevo
+    if (user_version < 4) migrateToV4();
+    if (user_version < 5) migrateToV5();
 
     db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     db.execSync(`COMMIT;`);
@@ -70,9 +74,7 @@ function migrateIfNeeded() {
   }
 }
 
-// ==========================
-// MIGRACIÓN V2
-// ==========================
+// V2
 function migrateToV2() {
   safeAddColumn("habits", "start_time", "TEXT");
   safeAddColumn("habits", "end_time", "TEXT");
@@ -112,9 +114,7 @@ function migrateToV2() {
   `);
 }
 
-// ==========================
-// MIGRACIÓN V3
-// ==========================
+// V3
 function migrateToV3() {
   db.execSync(`
     UPDATE habits
@@ -136,13 +136,10 @@ function migrateToV3() {
   `);
 }
 
-// ==========================
-// ✅ MIGRACIÓN V4 (notificaciones)
-// ==========================
+// V4 (notificaciones)
 function migrateToV4() {
   safeAddColumn("habits", "notification_ids", "TEXT");
 
-  // normaliza a [] si es null
   db.execSync(`
     UPDATE habits
     SET notification_ids = '[]'
@@ -150,9 +147,31 @@ function migrateToV4() {
   `);
 }
 
-// ==========================
-// Helpers
-// ==========================
+// ✅ V5 (pausa)
+function migrateToV5() {
+  safeAddColumn("habits", "is_paused", "INTEGER");
+  safeAddColumn("habits", "paused_at", "TEXT");
+  safeAddColumn("habits", "pause_reason", "TEXT");
+
+  db.execSync(`
+    UPDATE habits
+    SET is_paused = 0
+    WHERE is_paused IS NULL;
+  `);
+
+  db.execSync(`
+    UPDATE habits
+    SET paused_at = NULL
+    WHERE paused_at IS NULL;
+  `);
+
+  db.execSync(`
+    UPDATE habits
+    SET pause_reason = NULL
+    WHERE pause_reason IS NULL;
+  `);
+}
+
 function safeAddColumn(table: string, column: string, type: string) {
   try {
     db.execSync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
