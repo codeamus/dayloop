@@ -23,7 +23,7 @@
         "light": "./assets/icons/ios-light.png",
         "tinted": "./assets/icons/ios-tinted.png"
       },
-      "buildNumber": 5
+      "buildNumber": "5"
     },
     "android": {
       "versionCode": 5,
