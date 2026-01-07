@@ -1,16 +1,18 @@
 // app/(tabs)/index.tsx
+import { container } from "@/core/di/container";
 import { Screen } from "@/presentation/components/Screen";
 import { useNotificationPermission } from "@/presentation/hooks/useNotificationPermission";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
-import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -38,35 +40,89 @@ function formatBlock(h: any): string | null {
   return null;
 }
 
-
 export default function TodayScreen() {
   const { loading, habits, toggle } = useTodayHabits();
 
+  // ✅ Home por defecto: vista panorámica “Hoy”
+  const [showFrequencyFilter, setShowFrequencyFilter] = useState(false);
+
+  // Si el usuario activa “ver por frecuencia”, se usa esto:
   const [frequencyTab, setFrequencyTab] = useState<FrequencyTab>("daily");
+
+  // Se mantiene el filtro por momento del día
   const [timeTab, setTimeTab] = useState<TimeTab>("all");
 
-  const { status, isGranted, request } = useNotificationPermission();
-
+  const { isGranted, request } = useNotificationPermission();
   const shouldShowNotificationPrompt = !isGranted && habits.length > 0;
 
-  const filtered = useMemo(() => {
-    // 1) Filtrar por frecuencia + timeOfDay
-    const byFrequency = habits.filter((h) => h.scheduleType === frequencyTab);
-    const byTime = byFrequency.filter((h) => {
+  // ✅ Base: filtra SOLO por timeOfDay (Todos/Mañana/Tarde/Noche)
+  const baseByTime = useMemo(() => {
+    return habits.filter((h) => {
       if (timeTab === "all") return true;
       return h.timeOfDay === timeTab;
     });
+  }, [habits, timeTab]);
 
-    // 2) Orden por startTime (si no hay, cae al final)
-    return [...byTime].sort((a, b) => {
+  // ✅ Conteos por frecuencia (se usan en el modo avanzado y en el mini-resumen)
+  const countByFrequency = useMemo(() => {
+    return {
+      daily: baseByTime.filter((h) => h.scheduleType === "daily").length,
+      weekly: baseByTime.filter((h) => h.scheduleType === "weekly").length,
+      monthly: baseByTime.filter((h) => h.scheduleType === "monthly").length,
+    };
+  }, [baseByTime]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Re-agenda weekly/monthly Android al entrar al Home
+      (async () => {
+        try {
+          const all = await container.getAllHabits.execute();
+          await container.notificationScheduler.rescheduleNextForAndroid(all);
+        } catch {
+          // ignore
+        }
+      })();
+
+      return () => {};
+    }, [])
+  );
+
+  // ✅ Auto-switch SOLO cuando el toggle está activo
+  useEffect(() => {
+    if (!showFrequencyFilter) return;
+
+    const currentCount = countByFrequency[frequencyTab];
+    if (currentCount === 0) {
+      if (countByFrequency.daily > 0) setFrequencyTab("daily");
+      else if (countByFrequency.weekly > 0) setFrequencyTab("weekly");
+      else if (countByFrequency.monthly > 0) setFrequencyTab("monthly");
+    }
+  }, [showFrequencyFilter, frequencyTab, countByFrequency]);
+
+  // ✅ Lista final:
+  // - Por defecto: TODOS los hábitos de hoy (baseByTime)
+  // - Si toggle activo: filtrados por frecuencia
+  const filtered = useMemo(() => {
+    const list = showFrequencyFilter
+      ? baseByTime.filter((h) => h.scheduleType === frequencyTab)
+      : baseByTime;
+
+    return [...list].sort((a, b) => {
       const aMin = hhmmToMinutes(a.startTime ?? a.time);
       const bMin = hhmmToMinutes(b.startTime ?? b.time);
       return aMin - bMin;
     });
-  }, [habits, frequencyTab, timeTab]);
+  }, [baseByTime, showFrequencyFilter, frequencyTab]);
 
   const pending = filtered.filter((h) => !h.done);
   const completed = filtered.filter((h) => h.done);
+
+  // ✅ Resumen global del día (siempre, sin filtros)
+  const globalPending = useMemo(
+    () => habits.filter((h) => !h.done).length,
+    [habits]
+  );
 
   if (loading) {
     return (
@@ -79,6 +135,15 @@ export default function TodayScreen() {
     );
   }
 
+  const frequencyLabel =
+    frequencyTab === "daily"
+      ? "diarios"
+      : frequencyTab === "weekly"
+      ? "semanales"
+      : "mensuales";
+
+  const miniCountsText = `Diario ${countByFrequency.daily} · Semanal ${countByFrequency.weekly} · Mensual ${countByFrequency.monthly}`;
+
   return (
     <Screen>
       {/* HEADER */}
@@ -86,8 +151,10 @@ export default function TodayScreen() {
         <View>
           <Text style={styles.headerTitle}>Hoy</Text>
           <Text style={styles.headerSubtitle}>
-            {pending.length > 0
-              ? `${pending.length} pendiente${pending.length === 1 ? "" : "s"}`
+            {globalPending > 0
+              ? `${globalPending} pendiente${
+                  globalPending === 1 ? "" : "s"
+                } hoy`
               : "Todo listo por hoy ✅"}
           </Text>
         </View>
@@ -116,26 +183,7 @@ export default function TodayScreen() {
         </View>
       )}
 
-      {/* Fila 1 */}
-      <View style={styles.topTabs}>
-        <SegmentButton
-          label="Diario"
-          active={frequencyTab === "daily"}
-          onPress={() => setFrequencyTab("daily")}
-        />
-        <SegmentButton
-          label="Semanal"
-          active={frequencyTab === "weekly"}
-          onPress={() => setFrequencyTab("weekly")}
-        />
-        <SegmentButton
-          label="Mensual"
-          active={frequencyTab === "monthly"}
-          onPress={() => setFrequencyTab("monthly")}
-        />
-      </View>
-
-      {/* Fila 2 */}
+      {/* Filtro por momento del día */}
       <View style={styles.filterRow}>
         <Chip
           label="Todos"
@@ -168,7 +216,9 @@ export default function TodayScreen() {
         <SectionTitle title="Pendientes" />
         {pending.length === 0 ? (
           <Text style={styles.emptyText}>
-            No tienes hábitos pendientes aquí.
+            {showFrequencyFilter
+              ? `No tienes hábitos ${frequencyLabel} pendientes aquí.`
+              : "No tienes hábitos pendientes hoy en esta vista."}
           </Text>
         ) : (
           pending.map((h, index) => {
@@ -210,7 +260,9 @@ export default function TodayScreen() {
         <SectionTitle title="Completados" />
         {completed.length === 0 ? (
           <Text style={styles.emptyText}>
-            Aún no completas hábitos en esta vista.
+            {showFrequencyFilter
+              ? `Aún no completas hábitos ${frequencyLabel} en esta vista.`
+              : "Aún no completas hábitos en esta vista."}
           </Text>
         ) : (
           completed.map((h, index) => {
@@ -251,6 +303,71 @@ export default function TodayScreen() {
             );
           })
         )}
+
+        {/* ✅ Toggle opcional ABAJO + mini contadores */}
+        <View style={styles.advancedWrap}>
+          <View style={styles.advancedRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.advancedTitle}>Ver por frecuencia</Text>
+              <Text style={styles.advancedSubtitle}>
+                {showFrequencyFilter
+                  ? "Filtra hábitos por Diario/Semanal/Mensual."
+                  : "Muestra todos los hábitos del día (recomendado)."}
+              </Text>
+
+              {/* ✅ Mini contadores */}
+              <Text style={styles.countsText}>{miniCountsText}</Text>
+
+              {/* ✅ Cuando está activo, muestra qué tab estás viendo */}
+              {showFrequencyFilter && (
+                <Text style={styles.activeCountText}>
+                  Viendo:{" "}
+                  <Text style={styles.activeCountStrong}>
+                    {frequencyTab === "daily"
+                      ? "Diario"
+                      : frequencyTab === "weekly"
+                      ? "Semanal"
+                      : "Mensual"}{" "}
+                    ({countByFrequency[frequencyTab]})
+                  </Text>
+                </Text>
+              )}
+            </View>
+
+            <Switch
+              value={showFrequencyFilter}
+              onValueChange={(v) => setShowFrequencyFilter(v)}
+              trackColor={{
+                false: "rgba(241,233,215,0.18)",
+                true: "rgba(230,188,1,0.45)",
+              }}
+              thumbColor={
+                showFrequencyFilter ? colors.primary : "rgba(241,233,215,0.75)"
+              }
+            />
+          </View>
+
+          {/* Tabs SOLO si el toggle está activo */}
+          {showFrequencyFilter && (
+            <View style={styles.topTabs}>
+              <SegmentButton
+                label={`Diario (${countByFrequency.daily})`}
+                active={frequencyTab === "daily"}
+                onPress={() => setFrequencyTab("daily")}
+              />
+              <SegmentButton
+                label={`Semanal (${countByFrequency.weekly})`}
+                active={frequencyTab === "weekly"}
+                onPress={() => setFrequencyTab("weekly")}
+              />
+              <SegmentButton
+                label={`Mensual (${countByFrequency.monthly})`}
+                active={frequencyTab === "monthly"}
+                onPress={() => setFrequencyTab("monthly")}
+              />
+            </View>
+          )}
+        </View>
 
         {/* CTA abajo */}
         <View style={styles.createWrapper}>
@@ -329,30 +446,6 @@ const styles = StyleSheet.create({
   },
   headerCtaText: { color: colors.primary, fontWeight: "800", fontSize: 13 },
 
-  topTabs: {
-    flexDirection: "row",
-    borderRadius: 999,
-    padding: 4,
-    marginBottom: 12,
-    backgroundColor: colors.surfaceOverlay,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentActive: {
-    backgroundColor: "rgba(230,188,1,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(230,188,1,0.40)",
-  },
-  segmentText: { fontSize: 13, color: colors.mutedText, fontWeight: "700" },
-  segmentTextActive: { color: colors.primary },
-
   filterRow: {
     flexDirection: "row",
     marginBottom: 14,
@@ -414,7 +507,6 @@ const styles = StyleSheet.create({
   habitHint: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
   habitHintDone: { color: colors.success },
 
-  // ✅ NUEVO: pill del bloque horario
   blockPill: {
     alignSelf: "flex-start",
     marginTop: 2,
@@ -425,18 +517,71 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(241,233,215,0.18)",
   },
-  blockPillText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "800",
-  },
+  blockPillText: { color: colors.text, fontSize: 12, fontWeight: "800" },
   blockPillDone: {
     backgroundColor: "rgba(142,205,110,0.10)",
     borderColor: "rgba(142,205,110,0.25)",
   },
-  blockPillTextDone: {
-    color: "rgba(241,233,215,0.75)",
+  blockPillTextDone: { color: "rgba(241,233,215,0.75)" },
+
+  // ✅ Toggle “ver por frecuencia”
+  advancedWrap: {
+    marginTop: 16,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "rgba(50,73,86,0.35)",
+    borderWidth: 1,
+    borderColor: colors.border,
   },
+  advancedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  advancedTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
+  advancedSubtitle: { marginTop: 2, color: colors.mutedText, fontSize: 12 },
+
+  // ✅ Contadores
+  countsText: {
+    marginTop: 8,
+    color: "rgba(241,233,215,0.70)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  activeCountText: {
+    marginTop: 6,
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  activeCountStrong: {
+    color: colors.text,
+    fontWeight: "900",
+  },
+
+  topTabs: {
+    flexDirection: "row",
+    borderRadius: 999,
+    padding: 4,
+    marginTop: 12,
+    backgroundColor: colors.surfaceOverlay,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 9,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentActive: {
+    backgroundColor: "rgba(230,188,1,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.40)",
+  },
+  segmentText: { fontSize: 12, color: colors.mutedText, fontWeight: "800" },
+  segmentTextActive: { color: colors.primary },
 
   createWrapper: { marginTop: 18 },
   createButton: {
@@ -448,6 +593,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   createText: { color: colors.bg, fontSize: 15, fontWeight: "900" },
+
   notificationBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -459,25 +605,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(230,188,1,0.35)",
   },
-  notificationTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  notificationText: {
-    color: colors.mutedText,
-    fontSize: 12,
-    marginTop: 2,
-  },
+  notificationTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  notificationText: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
   notificationButton: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 999,
     backgroundColor: colors.primary,
   },
-  notificationButtonText: {
-    color: colors.bg,
-    fontSize: 13,
-    fontWeight: "900",
-  },
+  notificationButtonText: { color: colors.bg, fontSize: 13, fontWeight: "900" },
 });
