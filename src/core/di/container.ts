@@ -62,7 +62,10 @@ class Container {
     this.habitRepository,
     this.notificationScheduler
   );
-  updateHabit = new UpdateHabit(this.habitRepository);
+  updateHabit = new UpdateHabit(
+    this.habitRepository,
+    this.notificationScheduler
+  );
 
   // Summaries / Stats
   getWeeklySummary = new GetWeeklySummary(

@@ -1,3 +1,4 @@
+// src/domain/services/NotificationScheduler.ts
 export type HabitNotificationPlan = {
   habitId: string;
   name: string;
@@ -13,4 +14,5 @@ export type HabitNotificationPlan = {
 export interface NotificationScheduler {
   scheduleForHabit(plan: HabitNotificationPlan): Promise<string[]>; // returns IDs
   cancel(notificationIds: string[]): Promise<void>;
+  cancelByHabitId?(habitId: string): Promise<void>;
 }
