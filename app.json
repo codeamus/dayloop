@@ -13,7 +13,7 @@
       "color": "#2b3e4a"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.codeamus.dayloop",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
