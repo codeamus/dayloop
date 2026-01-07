@@ -3,6 +3,12 @@
     "name": "Dayloop",
     "slug": "dayloop",
     "version": "1.0.5",
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "scheme": "dayloop",
     "userInterfaceStyle": "automatic",
