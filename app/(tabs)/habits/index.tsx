@@ -4,25 +4,37 @@ import { Screen } from "@/presentation/components/Screen";
 import { useAllHabits } from "@/presentation/hooks/useAllHabits";
 import { colors } from "@/theme/colors";
 import { router } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
-// ✅ Robusto: no revienta si el schedule no trae daysOfWeek (daily / monthly / legacy)
-function formatSchedule(schedule: HabitSchedule | any): string {
-  if (!schedule || typeof schedule !== "object") return "Diario";
+type Filter = "all" | "daily" | "weekly" | "monthly";
 
-  const type = schedule.type;
+function scheduleType(schedule: HabitSchedule | any): Filter {
+  const t = schedule?.type;
+  if (t === "weekly" || t === "monthly") return t;
+  return "daily";
+}
 
-  if (type === "daily") return "Diario";
+function typeLabel(t: Filter) {
+  if (t === "weekly") return "Semanal";
+  if (t === "monthly") return "Mensual";
+  return "Diario";
+}
 
-  if (type === "weekly") {
+function scheduleDetail(schedule: HabitSchedule | any): string | null {
+  if (!schedule || typeof schedule !== "object") return null;
+
+  if (schedule.type === "weekly") {
     const map: Record<number, string> = {
       0: "D",
       1: "L",
@@ -32,26 +44,31 @@ function formatSchedule(schedule: HabitSchedule | any): string {
       5: "V",
       6: "S",
     };
-
     const days = Array.isArray(schedule.daysOfWeek) ? schedule.daysOfWeek : [];
     const sorted = [...days].sort((a, b) => a - b);
-
-    return sorted.length
-      ? sorted.map((d) => map[d] ?? "?").join(" · ")
-      : "Semanal";
+    if (!sorted.length) return null;
+    return sorted.map((d) => map[d] ?? "?").join(" · ");
   }
 
-  // ✅ Si ya existe monthly en tu app aunque la entidad no lo tenga tipado aún
-  if (type === "monthly") {
+  if (schedule.type === "monthly") {
     const days = Array.isArray(schedule.daysOfMonth)
       ? schedule.daysOfMonth
       : [];
     const sorted = [...days].sort((a, b) => a - b);
-    return sorted.length ? `Mensual: ${sorted.join(", ")}` : "Mensual";
+    if (!sorted.length) return null;
+    return `Días ${sorted.join(", ")}`;
   }
 
-  // Fallback seguro
-  return "Diario";
+  return null;
+}
+
+function formatTime(h: any): string | null {
+  const start = h?.startTime ?? h?.time ?? null;
+  const end = h?.endTime ?? null;
+  if (!start && !end) return null;
+  if (start && end) return `${start}–${end}`;
+  if (start) return start;
+  return null;
 }
 
 function RightActions({ onDelete }: { onDelete: () => void }) {
@@ -62,8 +79,64 @@ function RightActions({ onDelete }: { onDelete: () => void }) {
   );
 }
 
+function Chip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive]}
+      hitSlop={6}
+    >
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function SectionHeader({ title, count }: { title: string; count: number }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionCount}>
+        <Text style={styles.sectionCountText}>{count}</Text>
+      </View>
+    </View>
+  );
+}
+
+function Pill({ label, tone }: { label: string; tone: "primary" | "soft" }) {
+  return (
+    <View
+      style={[
+        styles.pill,
+        tone === "primary" ? styles.pillPrimary : styles.pillSoft,
+      ]}
+    >
+      <Text
+        style={[
+          styles.pillText,
+          tone === "primary" ? styles.pillTextPrimary : styles.pillTextSoft,
+        ]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 export default function HabitsListScreen() {
   const { habits, loading, remove } = useAllHabits();
+
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   function confirmDelete(id: string, name: string) {
     Alert.alert(
@@ -75,6 +148,39 @@ export default function HabitsListScreen() {
       ]
     );
   }
+
+  const stats = useMemo(() => {
+    const daily = habits.filter(
+      (h) => scheduleType(h.schedule) === "daily"
+    ).length;
+    const weekly = habits.filter(
+      (h) => scheduleType(h.schedule) === "weekly"
+    ).length;
+    const monthly = habits.filter(
+      (h) => scheduleType(h.schedule) === "monthly"
+    ).length;
+    return { total: habits.length, daily, weekly, monthly };
+  }, [habits]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return habits
+      .filter((h) =>
+        filter === "all" ? true : scheduleType(h.schedule) === filter
+      )
+      .filter((h) => (!q ? true : (h.name ?? "").toLowerCase().includes(q)));
+  }, [habits, query, filter]);
+
+  const sections = useMemo(() => {
+    const daily = filtered.filter((h) => scheduleType(h.schedule) === "daily");
+    const weekly = filtered.filter(
+      (h) => scheduleType(h.schedule) === "weekly"
+    );
+    const monthly = filtered.filter(
+      (h) => scheduleType(h.schedule) === "monthly"
+    );
+    return { daily, weekly, monthly };
+  }, [filtered]);
 
   if (loading) {
     return (
@@ -89,35 +195,91 @@ export default function HabitsListScreen() {
 
   return (
     <Screen>
-      {/* HEADER */}
-      <View style={styles.header}>
+      {/* HEADER ROW (solo botones) */}
+      <View style={styles.headerRow}>
         <Pressable
           onPress={() => router.replace("/(tabs)")}
-          style={styles.backButton}
+          style={styles.headerBtn}
           hitSlop={10}
         >
-          <Text style={styles.backIcon}>‹</Text>
-          <Text style={styles.backText}>Volver</Text>
+          <Text style={styles.headerBtnText}>‹ Volver</Text>
         </Pressable>
 
         <Text style={styles.headerTitle}>Hábitos</Text>
 
         <Pressable
           onPress={() => router.push("/habit-new")}
-          style={styles.addButton}
+          style={[styles.headerBtn, styles.headerBtnPrimary]}
           hitSlop={10}
         >
-          <Text style={styles.addButtonText}>+ Crear</Text>
+          <Text style={[styles.headerBtnText, styles.headerBtnTextPrimary]}>
+            + Crear
+          </Text>
         </Pressable>
       </View>
 
-      {habits.length === 0 && (
+      {/* ✅ HEADER CENTER movido antes del search */}
+      <View style={styles.headerCenterBlock}>
+        <Text style={styles.headerSubtitle}>
+          {stats.total} total · {stats.daily} diarios · {stats.weekly} semanales
+          · {stats.monthly} mensuales
+        </Text>
+      </View>
+
+      {/* SEARCH */}
+      <View style={styles.searchBox}>
+        <Text style={styles.searchIcon}>⌕</Text>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Buscar hábito…"
+          placeholderTextColor="rgba(241,233,215,0.35)"
+          style={styles.searchInput}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {!!query && (
+          <Pressable
+            onPress={() => setQuery("")}
+            hitSlop={10}
+            style={styles.clearBtn}
+          >
+            <Text style={styles.clearText}>×</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* FILTER CHIPS */}
+      <View style={styles.chipsRow}>
+        <Chip
+          label="Todos"
+          active={filter === "all"}
+          onPress={() => setFilter("all")}
+        />
+        <Chip
+          label={`Diario (${stats.daily})`}
+          active={filter === "daily"}
+          onPress={() => setFilter("daily")}
+        />
+        <Chip
+          label={`Semanal (${stats.weekly})`}
+          active={filter === "weekly"}
+          onPress={() => setFilter("weekly")}
+        />
+        <Chip
+          label={`Mensual (${stats.monthly})`}
+          active={filter === "monthly"}
+          onPress={() => setFilter("monthly")}
+        />
+      </View>
+
+      {/* EMPTY STATES */}
+      {habits.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyTitle}>Aún no tienes hábitos</Text>
           <Text style={styles.emptySubtitle}>
             Crea tu primer hábito y comienza tu loop.
           </Text>
-
           <Pressable
             style={styles.emptyCta}
             onPress={() => router.push("/habit-new")}
@@ -125,33 +287,134 @@ export default function HabitsListScreen() {
             <Text style={styles.emptyCtaText}>Crear hábito</Text>
           </Pressable>
         </View>
-      )}
-
-      {habits.map((h) => (
-        <Swipeable
-          key={h.id}
-          overshootRight={false}
-          renderRightActions={() => (
-            <RightActions onDelete={() => confirmDelete(h.id, h.name)} />
-          )}
-        >
+      ) : filtered.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyTitle}>No encontramos resultados</Text>
+          <Text style={styles.emptySubtitle}>
+            Prueba con otro nombre o cambia el filtro.
+          </Text>
           <Pressable
-            style={styles.item}
-            onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
+            style={[
+              styles.emptyCta,
+              { backgroundColor: "rgba(230,188,1,0.18)" },
+            ]}
+            onPress={() => {
+              setQuery("");
+              setFilter("all");
+            }}
           >
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.name}>{h.name}</Text>
-              <Text style={styles.schedule}>{formatSchedule(h.schedule)}</Text>
-            </View>
-
-            <View style={styles.right}>
-              <Text style={styles.icon}>{h.icon}</Text>
-              <Text style={styles.chev}>›</Text>
-            </View>
+            <Text style={[styles.emptyCtaText, { color: colors.text }]}>
+              Limpiar filtros
+            </Text>
           </Pressable>
-        </Swipeable>
-      ))}
+        </View>
+      ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {sections.daily.length > 0 && (
+            <>
+              <SectionHeader title="Diarios" count={sections.daily.length} />
+              {sections.daily.map((h) => (
+                <HabitCard
+                  key={h.id}
+                  h={h}
+                  onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
+                  onDelete={() => confirmDelete(h.id, h.name)}
+                />
+              ))}
+            </>
+          )}
+
+          {sections.weekly.length > 0 && (
+            <>
+              <SectionHeader title="Semanales" count={sections.weekly.length} />
+              {sections.weekly.map((h) => (
+                <HabitCard
+                  key={h.id}
+                  h={h}
+                  onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
+                  onDelete={() => confirmDelete(h.id, h.name)}
+                />
+              ))}
+            </>
+          )}
+
+          {sections.monthly.length > 0 && (
+            <>
+              <SectionHeader
+                title="Mensuales"
+                count={sections.monthly.length}
+              />
+              {sections.monthly.map((h) => (
+                <HabitCard
+                  key={h.id}
+                  h={h}
+                  onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
+                  onDelete={() => confirmDelete(h.id, h.name)}
+                />
+              ))}
+            </>
+          )}
+        </ScrollView>
+      )}
     </Screen>
+  );
+}
+
+function HabitCard({
+  h,
+  onPress,
+  onDelete,
+}: {
+  h: any;
+  onPress: () => void;
+  onDelete: () => void;
+}) {
+  const t = scheduleType(h.schedule);
+  const label = typeLabel(t);
+  const time = formatTime(h);
+  const detail = scheduleDetail(h.schedule);
+
+  return (
+    <Swipeable
+      overshootRight={false}
+      renderRightActions={() => <RightActions onDelete={onDelete} />}
+    >
+      <Pressable style={styles.card} onPress={onPress}>
+        <View
+          style={[
+            styles.cardBar,
+            { backgroundColor: h.color || colors.primary },
+          ]}
+        />
+
+        <View style={styles.cardMain}>
+          <Text style={styles.cardTitle} numberOfLines={1}>
+            {h.name}
+          </Text>
+
+          <View style={styles.cardMeta}>
+            <Pill label={label} tone="primary" />
+            {!!time && <Pill label={time} tone="soft" />}
+            {!!detail && (
+              <Text style={styles.cardDetail} numberOfLines={1}>
+                {detail}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.cardRight}>
+          <View style={styles.iconBubble}>
+            <Text style={styles.cardIcon}>{h.icon}</Text>
+          </View>
+          <Text style={styles.cardChev}>›</Text>
+        </View>
+      </Pressable>
+    </Swipeable>
   );
 }
 
@@ -159,53 +422,127 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   loadingText: { color: colors.mutedText, fontSize: 13 },
 
-  header: {
+  // ✅ HEADER SOLO BOTONES
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
     justifyContent: "space-between",
+    marginBottom: 10,
   },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+  headerBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 999,
     backgroundColor: "rgba(50,73,86,0.40)",
     borderWidth: 1,
     borderColor: colors.border,
   },
-  backIcon: {
-    color: colors.text,
-    fontSize: 18,
-    marginRight: 2,
-    fontWeight: "900",
+  headerBtnPrimary: {
+    backgroundColor: "rgba(230,188,1,0.16)",
+    borderColor: "rgba(230,188,1,0.45)",
   },
-  backText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: "800",
+  headerBtnText: { color: colors.text, fontWeight: "900", fontSize: 13 },
+  headerBtnTextPrimary: { color: colors.primary },
+
+  // ✅ BLOQUE CENTRAL NUEVO (antes del search)
+  headerCenterBlock: {
+    alignItems: "center",
+    marginBottom: 12,
   },
-  headerTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: "900",
+  headerTitle: { color: colors.text, fontSize: 20, fontWeight: "900" },
+  headerSubtitle: {
+    marginTop: 6,
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: "700",
+    textAlign: "center",
+    lineHeight: 15,
   },
 
-  addButton: {
-    backgroundColor: "rgba(230,188,1,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(230,188,1,0.45)",
+  searchBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
   },
-  addButtonText: {
-    color: colors.primary,
+  searchIcon: {
+    color: "rgba(241,233,215,0.55)",
+    fontSize: 16,
     fontWeight: "900",
-    fontSize: 13,
   },
+  searchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "800",
+    paddingVertical: 0,
+  },
+  clearBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.15)",
+  },
+  clearText: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: -1,
+  },
+
+  chipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+    marginBottom: 14,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(43,62,74,0.20)",
+  },
+  chipActive: {
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderColor: "rgba(241,233,215,0.18)",
+  },
+  chipText: { fontSize: 12, color: colors.text, fontWeight: "700" },
+  chipTextActive: { fontWeight: "900" },
+
+  sectionHeader: {
+    marginTop: 14,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    color: colors.mutedText,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+  sectionCount: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.14)",
+  },
+  sectionCountText: { color: colors.text, fontSize: 12, fontWeight: "900" },
 
   emptyBox: {
     marginTop: 10,
@@ -215,11 +552,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "900",
-  },
+  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
   emptySubtitle: {
     color: colors.mutedText,
     fontSize: 12,
@@ -234,47 +567,74 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.primary,
   },
-  emptyCtaText: {
-    color: colors.primaryText,
-    fontSize: 14,
-    fontWeight: "900",
-  },
+  emptyCtaText: { color: colors.primaryText, fontSize: 14, fontWeight: "900" },
 
-  item: {
+  card: {
     marginTop: 10,
-    padding: 14,
     borderRadius: 18,
     backgroundColor: "rgba(50,73,86,0.45)",
     borderWidth: 1,
     borderColor: colors.border,
+    padding: 14,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
   },
-  name: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: "900",
+  cardBar: { width: 4, alignSelf: "stretch", borderRadius: 999, opacity: 0.95 },
+  cardMain: { flex: 1, paddingRight: 6 },
+  cardTitle: { color: colors.text, fontSize: 15, fontWeight: "900" },
+  cardMeta: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  schedule: {
-    color: colors.mutedText,
+  cardDetail: {
+    color: "rgba(241,233,215,0.60)",
     fontSize: 12,
-    marginTop: 3,
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  right: {
-    flexDirection: "row",
+
+  pill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+  pillPrimary: {
+    backgroundColor: "rgba(230,188,1,0.14)",
+    borderColor: "rgba(230,188,1,0.30)",
+  },
+  pillSoft: {
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderColor: "rgba(241,233,215,0.18)",
+  },
+  pillText: { fontSize: 12, fontWeight: "900" },
+  pillTextPrimary: { color: colors.primary },
+  pillTextSoft: { color: colors.text },
+
+  cardRight: {
+    width: 56,
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    alignSelf: "stretch",
+  },
+  iconBubble: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
     alignItems: "center",
-    gap: 10,
+    justifyContent: "center",
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.16)",
   },
-  icon: {
-    fontSize: 20,
-  },
-  chev: {
+  cardIcon: { fontSize: 18 },
+  cardChev: {
     color: "rgba(241,233,215,0.55)",
     fontSize: 18,
     fontWeight: "900",
-    marginTop: -1,
   },
 
   deleteAction: {
@@ -285,8 +645,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 18,
   },
-  deleteText: {
-    color: colors.text,
-    fontWeight: "900",
-  },
+  deleteText: { color: colors.text, fontWeight: "900" },
 });
