@@ -21,11 +21,10 @@ jobs:
   #     profile: preview
 
   build_ios_preview:
-    name: Build iOS (preview - store)
-    type: build
-    params:
-      platform: ios
-      profile: preview
+    name: Build iOS (preview - TestFlight)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
   submit_ios_preview:
     name: Submit iOS (TestFlight)
