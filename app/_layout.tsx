@@ -124,13 +124,13 @@ export default function RootLayout() {
               {/* Tabs */}
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-              {/* MODAL: Crear hábito */}
               <Stack.Screen
                 name="habit-new"
                 options={{
-                  presentation: "transparentModal",
-                  animation: "fade",
-                  contentStyle: { backgroundColor: "transparent" },
+                  headerShown: false,
+                  presentation: "card", // ✅ screen normal
+                  animation: "slide_from_right", // o "fade"
+                  contentStyle: { backgroundColor: colors.bg },
                 }}
               />
             </Stack>

@@ -1,8 +1,8 @@
 // src/presentation/components/EmojiPickerSheet.tsx
 import {
-     BottomSheetFlatList,
-     BottomSheetModal,
-     BottomSheetTextInput,
+  BottomSheetFlatList,
+  BottomSheetModal,
+  BottomSheetTextInput,
 } from "@gorhom/bottom-sheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import emojiDatasource from "emoji-datasource";
@@ -137,12 +137,13 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
     <BottomSheetModal
       ref={sheetRef}
       snapPoints={snapPoints}
+      stackBehavior="push"
       onDismiss={handleDismiss}
       backgroundStyle={styles.sheetBg}
       handleIndicatorStyle={styles.handle}
       enablePanDownToClose
-      enableHandlePanningGesture={false} // ✅ fijo
-      enableContentPanningGesture // ✅ scroll interno
+      enableHandlePanningGesture={false}
+      enableContentPanningGesture
     >
       {/* ✅ UN SOLO SCROLL: BottomSheetFlatList */}
       <BottomSheetFlatList
