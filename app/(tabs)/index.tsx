@@ -1,10 +1,12 @@
 // app/(tabs)/index.tsx
 import { container } from "@/core/di/container";
 import { Screen } from "@/presentation/components/Screen";
+import { StatusPill } from "@/presentation/components/StatusPill";
 import { useNotificationPermission } from "@/presentation/hooks/useNotificationPermission";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
+import { Feather } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -13,10 +15,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 
-type FrequencyTab = "daily" | "weekly" | "monthly";
 type TimeTab = "all" | "morning" | "afternoon" | "evening";
 
 function hhmmToMinutes(hhmm?: string): number {
@@ -39,41 +40,24 @@ function formatBlock(h: any): string | null {
   return null;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toLocalYMD(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 export default function TodayScreen() {
   const { loading, habits, toggle } = useTodayHabits();
-
-  // ✅ Home por defecto: vista panorámica “Hoy”
-  const [showFrequencyFilter, setShowFrequencyFilter] = useState(false);
-
-  // Si el usuario activa “ver por frecuencia”, se usa esto:
-  const [frequencyTab, setFrequencyTab] = useState<FrequencyTab>("daily");
-
-  // Se mantiene el filtro por momento del día
   const [timeTab, setTimeTab] = useState<TimeTab>("all");
 
   const { isGranted, request } = useNotificationPermission();
   const shouldShowNotificationPrompt = !isGranted && habits.length > 0;
 
-  // ✅ Base: filtra SOLO por timeOfDay (Todos/Mañana/Tarde/Noche)
-  const baseByTime = useMemo(() => {
-    return habits.filter((h) => {
-      if (timeTab === "all") return true;
-      return h.timeOfDay === timeTab;
-    });
-  }, [habits, timeTab]);
-
-  // ✅ Conteos por frecuencia (se usan en el modo avanzado y en el mini-resumen)
-  const countByFrequency = useMemo(() => {
-    return {
-      daily: baseByTime.filter((h) => h.scheduleType === "daily").length,
-      weekly: baseByTime.filter((h) => h.scheduleType === "weekly").length,
-      monthly: baseByTime.filter((h) => h.scheduleType === "monthly").length,
-    };
-  }, [baseByTime]);
-
+  // Re-agenda weekly/monthly Android al entrar al Home
   useFocusEffect(
     useCallback(() => {
-      // Re-agenda weekly/monthly Android al entrar al Home
       (async () => {
         try {
           const all = await container.getAllHabits.execute();
@@ -82,46 +66,95 @@ export default function TodayScreen() {
           // ignore
         }
       })();
-
       return () => {};
     }, [])
   );
 
-  // ✅ Auto-switch SOLO cuando el toggle está activo
-  useEffect(() => {
-    if (!showFrequencyFilter) return;
+  // ✅ Global (sin filtros)
+  const totalToday = habits.length;
+  const doneToday = useMemo(
+    () => habits.filter((h) => h.done).length,
+    [habits]
+  );
+  const pendingToday = totalToday - doneToday;
+  const progressPct =
+    totalToday > 0 ? Math.round((doneToday / totalToday) * 100) : 0;
 
-    const currentCount = countByFrequency[frequencyTab];
-    if (currentCount === 0) {
-      if (countByFrequency.daily > 0) setFrequencyTab("daily");
-      else if (countByFrequency.weekly > 0) setFrequencyTab("weekly");
-      else if (countByFrequency.monthly > 0) setFrequencyTab("monthly");
-    }
-  }, [showFrequencyFilter, frequencyTab, countByFrequency]);
-
-  // ✅ Lista final:
-  // - Por defecto: TODOS los hábitos de hoy (baseByTime)
-  // - Si toggle activo: filtrados por frecuencia
+  // ✅ Filtrado por momento del día
   const filtered = useMemo(() => {
-    const list = showFrequencyFilter
-      ? baseByTime.filter((h) => h.scheduleType === frequencyTab)
-      : baseByTime;
+    const list = habits.filter((h) => {
+      if (timeTab === "all") return true;
+      return h.timeOfDay === timeTab;
+    });
 
     return [...list].sort((a, b) => {
       const aMin = hhmmToMinutes(a.startTime ?? a.time);
       const bMin = hhmmToMinutes(b.startTime ?? b.time);
       return aMin - bMin;
     });
-  }, [baseByTime, showFrequencyFilter, frequencyTab]);
+  }, [habits, timeTab]);
 
   const pending = filtered.filter((h) => !h.done);
   const completed = filtered.filter((h) => h.done);
 
-  // ✅ Resumen global del día (siempre, sin filtros)
-  const globalPending = useMemo(
-    () => habits.filter((h) => !h.done).length,
-    [habits]
-  );
+  // ✅ Resumen semanal (últimos 7 días) sin navegar a [id]
+  const [weekDoneDays, setWeekDoneDays] = useState<number>(0); // días con >=1 hábito completado
+  const [weekTotalDone, setWeekTotalDone] = useState<number>(0); // total completados en 7 días
+  const [weekLoading, setWeekLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setWeekLoading(true);
+      try {
+        const today = new Date();
+        const days: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          days.push(toLocalYMD(d));
+        }
+        const daySet = new Set(days);
+
+        // Traer logs y contar completados en los últimos 7 días
+        const logs = await (container as any).habitLogRepository?.listAll?.();
+
+        if (cancelled) return;
+
+        if (!Array.isArray(logs)) {
+          setWeekDoneDays(0);
+          setWeekTotalDone(0);
+          return;
+        }
+
+        let totalDone = 0;
+        const doneDates = new Set<string>();
+
+        for (const l of logs) {
+          const date = l?.date; // "YYYY-MM-DD"
+          const done = !!l?.done;
+          if (!done || !date || !daySet.has(date)) continue;
+          totalDone += 1;
+          doneDates.add(date);
+        }
+
+        setWeekTotalDone(totalDone);
+        setWeekDoneDays(doneDates.size);
+      } catch {
+        if (!cancelled) {
+          setWeekDoneDays(0);
+          setWeekTotalDone(0);
+        }
+      } finally {
+        if (!cancelled) setWeekLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [habits]); // refresca al cambiar estado (toggle)
 
   if (loading) {
     return (
@@ -134,28 +167,24 @@ export default function TodayScreen() {
     );
   }
 
-  const frequencyLabel =
-    frequencyTab === "daily"
-      ? "diarios"
-      : frequencyTab === "weekly"
-      ? "semanales"
-      : "mensuales";
-
-  const miniCountsText = `Diario ${countByFrequency.daily} · Semanal ${countByFrequency.weekly} · Mensual ${countByFrequency.monthly}`;
-
   return (
     <Screen>
       {/* HEADER */}
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Hoy</Text>
-          <Text style={styles.headerSubtitle}>
-            {globalPending > 0
-              ? `${globalPending} pendiente${
-                  globalPending === 1 ? "" : "s"
-                } hoy`
-              : "Todo listo por hoy ✅"}
-          </Text>
+          <View style={{ marginTop: 6 }}>
+            {pendingToday > 0 ? (
+              <StatusPill
+                variant="pending"
+                text={`${pendingToday} pendiente${
+                  pendingToday === 1 ? "" : "s"
+                } hoy`}
+              />
+            ) : (
+              <StatusPill variant="ok" text="Todo listo por hoy" />
+            )}
+          </View>
         </View>
 
         <Pressable
@@ -181,6 +210,90 @@ export default function TodayScreen() {
           </Pressable>
         </View>
       )}
+
+      {/* ✅ RESUMENES (sin links) */}
+      <View style={styles.summaryGrid}>
+        {/* Resumen día */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Resumen de hoy</Text>
+
+          <Text style={styles.summaryBig}>
+            {doneToday}/{totalToday}
+            <Text style={styles.summarySmall}> completados</Text>
+          </Text>
+
+          <ProgressBar value={progressPct} />
+
+          <View style={styles.summaryHintWrap}>
+            {totalToday === 0 ? (
+              <Text style={styles.summaryHintText}>
+                Crea tu primer hábito para empezar.
+              </Text>
+            ) : pendingToday > 0 ? (
+              <View style={styles.inlineRow}>
+                <Feather name="clock" size={14} color={colors.mutedText} />
+                <Text style={styles.summaryHintText}>
+                  Te faltan {pendingToday} para cerrar el día.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.inlineRow}>
+                <Feather name="zap" size={14} color={colors.primary} />
+                <Text style={styles.summaryHintText}>
+                  Día completo. Mantén la racha
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Resumen semana */}
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Últimos 7 días</Text>
+
+          {weekLoading ? (
+            <View style={{ marginTop: 10 }}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={[styles.summaryHintText, { marginTop: 8 }]}>
+                Calculando…
+              </Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.summaryBig}>
+                {weekDoneDays}
+                <Text style={styles.summarySmall}> días activos</Text>
+              </Text>
+
+              <Text style={[styles.summaryHintText, { marginTop: 10 }]}>
+                {weekTotalDone > 0
+                  ? `Marcaste ${weekTotalDone} completados en la semana.`
+                  : "Aún no completas hábitos esta semana."}
+              </Text>
+
+              <View style={styles.weekMiniRow}>
+                <View style={styles.weekPill}>
+                  <View style={styles.weekPillRow}>
+                    <Feather name="activity" size={14} color={colors.text} />
+                    <Text style={styles.weekPillText}>{weekDoneDays}/7</Text>
+                  </View>
+                </View>
+
+                <View style={styles.weekPill}>
+                  <View style={styles.weekPillRow}>
+                    <Feather
+                      name="check-circle"
+                      size={14}
+                      color={colors.text}
+                    />
+                    <Text style={styles.weekPillText}>{weekTotalDone}</Text>
+                  </View>
+                </View>
+              </View>
+            </>
+          )}
+        </View>
+      </View>
 
       {/* Filtro por momento del día */}
       <View style={styles.filterRow}>
@@ -215,9 +328,7 @@ export default function TodayScreen() {
         <SectionTitle title="Pendientes" />
         {pending.length === 0 ? (
           <Text style={styles.emptyText}>
-            {showFrequencyFilter
-              ? `No tienes hábitos ${frequencyLabel} pendientes aquí.`
-              : "No tienes hábitos pendientes hoy en esta vista."}
+            No tienes hábitos pendientes hoy en esta vista.
           </Text>
         ) : (
           pending.map((h, index) => {
@@ -227,7 +338,7 @@ export default function TodayScreen() {
               <Pressable
                 key={`${h.id}-${index}`}
                 style={styles.habitCard}
-                onPress={() => toggle(h.id)}
+                onPress={() => toggle(h.id)} // ✅ solo completar
               >
                 <View
                   style={[
@@ -259,9 +370,7 @@ export default function TodayScreen() {
         <SectionTitle title="Completados" />
         {completed.length === 0 ? (
           <Text style={styles.emptyText}>
-            {showFrequencyFilter
-              ? `Aún no completas hábitos ${frequencyLabel} en esta vista.`
-              : "Aún no completas hábitos en esta vista."}
+            Aún no completas hábitos en esta vista.
           </Text>
         ) : (
           completed.map((h, index) => {
@@ -271,11 +380,11 @@ export default function TodayScreen() {
               <Pressable
                 key={`${h.id}-${index}`}
                 style={[styles.habitCard, styles.habitCardDone]}
-                onPress={() => toggle(h.id)}
+                onPress={() => toggle(h.id)} // ✅ permite desmarcar
               >
-                <View
-                  style={[styles.habitDot, { backgroundColor: colors.success }]}
-                />
+                <View style={styles.checkCircle}>
+                  <Text style={styles.checkIcon}>✓</Text>
+                </View>
 
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={[styles.habitText, styles.habitTextDone]}>
@@ -303,71 +412,6 @@ export default function TodayScreen() {
           })
         )}
 
-        {/* ✅ Toggle opcional ABAJO + mini contadores */}
-        <View style={styles.advancedWrap}>
-          <View style={styles.advancedRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.advancedTitle}>Ver por frecuencia</Text>
-              <Text style={styles.advancedSubtitle}>
-                {showFrequencyFilter
-                  ? "Filtra hábitos por Diario/Semanal/Mensual."
-                  : "Muestra todos los hábitos del día (recomendado)."}
-              </Text>
-
-              {/* ✅ Mini contadores */}
-              <Text style={styles.countsText}>{miniCountsText}</Text>
-
-              {/* ✅ Cuando está activo, muestra qué tab estás viendo */}
-              {showFrequencyFilter && (
-                <Text style={styles.activeCountText}>
-                  Viendo:{" "}
-                  <Text style={styles.activeCountStrong}>
-                    {frequencyTab === "daily"
-                      ? "Diario"
-                      : frequencyTab === "weekly"
-                      ? "Semanal"
-                      : "Mensual"}{" "}
-                    ({countByFrequency[frequencyTab]})
-                  </Text>
-                </Text>
-              )}
-            </View>
-
-            {/* <Switch
-              value={showFrequencyFilter}
-              onValueChange={(v) => setShowFrequencyFilter(v)}
-              trackColor={{
-                false: "rgba(241,233,215,0.18)",
-                true: "rgba(230,188,1,0.45)",
-              }}
-              thumbColor={
-                showFrequencyFilter ? colors.primary : "rgba(241,233,215,0.75)"
-              }
-            /> */}
-          </View>
-
-          {/* Tabs SOLO si el toggle está activo */}
-          {showFrequencyFilter && (
-            <View style={styles.topTabs}>
-              <SegmentButton
-                label={`Diario (${countByFrequency.daily})`}
-                active={frequencyTab === "daily"}
-                onPress={() => setFrequencyTab("daily")}
-              />
-              <SegmentButton
-                label={`Semanal (${countByFrequency.weekly})`}
-                active={frequencyTab === "weekly"}
-                onPress={() => setFrequencyTab("weekly")}
-              />
-              <SegmentButton
-                label={`Mensual (${countByFrequency.monthly})`}
-                active={frequencyTab === "monthly"}
-                onPress={() => setFrequencyTab("monthly")}
-              />
-            </View>
-          )}
-        </View>
-
         {/* CTA abajo */}
         <View style={styles.createWrapper}>
           <Pressable
@@ -388,19 +432,12 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
-type SegmentProps = { label: string; active: boolean; onPress: () => void };
-
-function SegmentButton({ label, active, onPress }: SegmentProps) {
+function ProgressBar({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(100, value));
   return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.segment, active && styles.segmentActive]}
-      hitSlop={6}
-    >
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-        {label}
-      </Text>
-    </Pressable>
+    <View style={styles.progressTrack}>
+      <View style={[styles.progressFill, { width: `${v}%` }]} />
+    </View>
   );
 }
 
@@ -434,7 +471,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerTitle: { color: colors.text, fontSize: 22, fontWeight: "800" },
-  headerSubtitle: { marginTop: 2, color: colors.mutedText, fontSize: 13 },
   headerCta: {
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -444,6 +480,103 @@ const styles = StyleSheet.create({
     borderColor: "rgba(230,188,1,0.35)",
   },
   headerCtaText: { color: colors.primary, fontWeight: "800", fontSize: 13 },
+
+  notificationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderRadius: 16,
+    backgroundColor: "rgba(230,188,1,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.35)",
+  },
+  notificationTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  notificationText: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
+  notificationButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
+  notificationButtonText: { color: colors.bg, fontSize: 13, fontWeight: "900" },
+
+  // ✅ Summary
+  summaryGrid: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  summaryCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "rgba(50,73,86,0.35)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryTitle: {
+    color: "rgba(241,233,215,0.75)",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.3,
+  },
+  summaryBig: {
+    marginTop: 8,
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  summarySmall: {
+    color: "rgba(241,233,215,0.75)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  summaryHintWrap: { marginTop: 10 },
+  summaryHintText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+  inlineRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  progressTrack: {
+    marginTop: 10,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.14)",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "rgba(230,188,1,0.65)",
+  },
+
+  weekMiniRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    flexWrap: "wrap",
+  },
+  weekPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(43,62,74,0.35)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  weekPillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  weekPillText: { color: colors.text, fontWeight: "900", fontSize: 12 },
 
   filterRow: {
     flexDirection: "row",
@@ -496,6 +629,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   habitCardDone: { backgroundColor: "rgba(50,73,86,0.35)" },
+
   habitDot: { width: 10, height: 10, borderRadius: 999 },
   habitText: { color: colors.text, fontSize: 15, fontWeight: "800" },
   habitTextDone: {
@@ -504,7 +638,7 @@ const styles = StyleSheet.create({
   },
   habitRight: { minWidth: 44, alignItems: "flex-end" },
   habitHint: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },
-  habitHintDone: { color: colors.success },
+  habitHintDone: { color: "rgba(142,205,110,0.85)", fontWeight: "800" },
 
   blockPill: {
     alignSelf: "flex-start",
@@ -523,65 +657,6 @@ const styles = StyleSheet.create({
   },
   blockPillTextDone: { color: "rgba(241,233,215,0.75)" },
 
-  // ✅ Toggle “ver por frecuencia”
-  advancedWrap: {
-    marginTop: 16,
-    borderRadius: 18,
-    padding: 14,
-    backgroundColor: "rgba(50,73,86,0.35)",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  advancedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  advancedTitle: { color: colors.text, fontSize: 14, fontWeight: "900" },
-  advancedSubtitle: { marginTop: 2, color: colors.mutedText, fontSize: 12 },
-
-  // ✅ Contadores
-  countsText: {
-    marginTop: 8,
-    color: "rgba(241,233,215,0.70)",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  activeCountText: {
-    marginTop: 6,
-    color: colors.mutedText,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  activeCountStrong: {
-    color: colors.text,
-    fontWeight: "900",
-  },
-
-  topTabs: {
-    flexDirection: "row",
-    borderRadius: 999,
-    padding: 4,
-    marginTop: 12,
-    backgroundColor: colors.surfaceOverlay,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentActive: {
-    backgroundColor: "rgba(230,188,1,0.16)",
-    borderWidth: 1,
-    borderColor: "rgba(230,188,1,0.40)",
-  },
-  segmentText: { fontSize: 12, color: colors.mutedText, fontWeight: "800" },
-  segmentTextActive: { color: colors.primary },
-
   createWrapper: { marginTop: 18 },
   createButton: {
     borderRadius: 18,
@@ -593,24 +668,20 @@ const styles = StyleSheet.create({
   },
   createText: { color: colors.bg, fontSize: 15, fontWeight: "900" },
 
-  notificationBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    marginBottom: 14,
-    borderRadius: 16,
-    backgroundColor: "rgba(230,188,1,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(230,188,1,0.35)",
-  },
-  notificationTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
-  notificationText: { color: colors.mutedText, fontSize: 12, marginTop: 2 },
-  notificationButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  checkCircle: {
+    width: 22,
+    height: 22,
     borderRadius: 999,
-    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(142,205,110,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(142,205,110,0.45)",
   },
-  notificationButtonText: { color: colors.bg, fontSize: 13, fontWeight: "900" },
+  checkIcon: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: colors.success,
+    marginTop: -1,
+  },
 });

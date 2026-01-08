@@ -3,6 +3,7 @@ import type { HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useAllHabits } from "@/presentation/hooks/useAllHabits";
 import { colors } from "@/theme/colors";
+import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -149,7 +150,6 @@ function RightActions({
   onTogglePause: () => void;
   onDelete: () => void;
 }) {
-  // altura real de la card (fallback razonable)
   const h = Math.max(76, height || 0);
 
   return (
@@ -288,7 +288,7 @@ export default function HabitsListScreen() {
       </View>
 
       <View style={styles.searchBox}>
-        <Text style={styles.searchIcon}>⌕</Text>
+        <Feather name="search" size={16} color={"rgba(241,233,215,0.55)"} />
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -538,6 +538,7 @@ const styles = StyleSheet.create({
   },
   headerBtnText: { color: colors.text, fontWeight: "900", fontSize: 13 },
   headerBtnTextPrimary: { color: colors.primary },
+
   headerCenterBlock: { alignItems: "center", marginBottom: 12 },
   headerTitle: { color: colors.text, fontSize: 20, fontWeight: "900" },
   headerSubtitle: {
@@ -560,11 +561,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 12,
-  },
-  searchIcon: {
-    color: "rgba(241,233,215,0.55)",
-    fontSize: 16,
-    fontWeight: "900",
   },
   searchInput: {
     flex: 1,
@@ -659,7 +655,6 @@ const styles = StyleSheet.create({
   },
   emptyCtaText: { color: colors.primaryText, fontSize: 14, fontWeight: "900" },
 
-  // ✅ margen consistente del item
   itemWrap: { marginTop: 10 },
 
   card: {
@@ -680,6 +675,7 @@ const styles = StyleSheet.create({
   cardMain: { flex: 1, paddingRight: 6 },
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: "900" },
   cardTitlePaused: { opacity: 0.75 },
+
   cardMeta: {
     marginTop: 10,
     flexDirection: "row",
@@ -743,7 +739,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  // ✅ Panel de acciones “card-like”
   actionsPanel: {
     width: 130,
     marginLeft: 10,
@@ -763,21 +758,13 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(241,233,215,0.12)",
   },
-  actionPause: {
-    backgroundColor: "rgba(241,233,215,0.08)",
-  },
-  actionResume: {
-    backgroundColor: "rgba(230,188,1,0.14)",
-  },
-  actionDel: {
-    backgroundColor: "rgba(255,90,90,0.18)",
-  },
+  actionPause: { backgroundColor: "rgba(241,233,215,0.08)" },
+  actionResume: { backgroundColor: "rgba(230,188,1,0.14)" },
+  actionDel: { backgroundColor: "rgba(255,90,90,0.18)" },
   actionText: {
     color: colors.text,
     fontWeight: "900",
     fontSize: 13,
   },
-  actionTextResume: {
-    color: colors.primary,
-  },
+  actionTextResume: { color: colors.primary },
 });
