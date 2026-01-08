@@ -1,6 +1,7 @@
 // app/(tabs)/habits/[id].tsx
 import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
+import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
 import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
 import MonthlyCalendar from "@/presentation/components/MonthlyCalendar";
 import { Screen } from "@/presentation/components/Screen";
@@ -112,6 +113,7 @@ export default function EditHabitScreen() {
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
+  const [isColorSheetOpen, setIsColorSheetOpen] = useState(false);
 
   const [isEmojiSheetOpen, setIsEmojiSheetOpen] = useState(false);
 
@@ -486,24 +488,26 @@ export default function EditHabitScreen() {
         />
 
         {/* Color */}
-        <Text style={styles.label}>Color</Text>
-        <View style={styles.colorsRow}>
-          {COLOR_PRESETS.map((c) => {
-            const active = c === color;
-            return (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                style={[
-                  styles.colorDotWrapper,
-                  active && styles.colorDotWrapperActive,
-                ]}
-              >
-                <View style={[styles.colorDot, { backgroundColor: c }]} />
-              </Pressable>
-            );
-          })}
+        <View style={styles.field}>
+          <Text style={styles.label}>Color</Text>
+
+          <View style={styles.iconPickerRow}>
+            <View style={[styles.iconPreview, { backgroundColor: color }]} />
+            <Pressable
+              onPress={() => setIsColorSheetOpen(true)}
+              style={styles.iconPickerButton}
+              hitSlop={10}
+            >
+              <Text style={styles.iconPickerButtonText}>Elegir color</Text>
+            </Pressable>
+          </View>
         </View>
+        <ColorPickerSheet
+          visible={isColorSheetOpen}
+          value={color}
+          onClose={() => setIsColorSheetOpen(false)}
+          onSelect={(c) => setColor(c)}
+        />
 
         {/* Ícono */}
         <Text style={styles.label}>Ícono</Text>
@@ -982,4 +986,5 @@ const styles = StyleSheet.create({
 
   streakPillRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   monthlyPillRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  field: { gap: 8, marginTop: 6 },
 });

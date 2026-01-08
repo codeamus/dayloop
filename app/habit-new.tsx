@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { scheduleHabitReminder } from "@/core/notifications/notifications";
+import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
 import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
 import { Screen } from "@/presentation/components/Screen";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
@@ -145,6 +146,7 @@ export default function HabitNewScreen() {
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
+  const [isColorSheetOpen, setIsColorSheetOpen] = useState(false);
 
   // Weekly
   const todayIndex = new Date().getDay(); // 0-6
@@ -453,20 +455,24 @@ export default function HabitNewScreen() {
         {/* Color */}
         <View style={styles.field}>
           <Text style={styles.label}>Color</Text>
-          <View style={styles.row}>
-            {COLOR_OPTIONS.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setColor(c)}
-                style={[
-                  styles.colorDot,
-                  { backgroundColor: c },
-                  color === c && styles.colorDotActive,
-                ]}
-              />
-            ))}
+
+          <View style={styles.iconPickerRow}>
+            <View style={[styles.iconPreview, { backgroundColor: color }]} />
+            <Pressable
+              onPress={() => setIsColorSheetOpen(true)}
+              style={styles.iconPickerButton}
+              hitSlop={10}
+            >
+              <Text style={styles.iconPickerButtonText}>Elegir color</Text>
+            </Pressable>
           </View>
         </View>
+        <ColorPickerSheet
+          visible={isColorSheetOpen}
+          value={color}
+          onClose={() => setIsColorSheetOpen(false)}
+          onSelect={(c) => setColor(c)}
+        />
 
         {/* Ícono */}
         <View style={styles.field}>
