@@ -1,15 +1,14 @@
 // app/habit-new.tsx
-import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import DateTimePicker, {
-  DateTimePickerEvent,
+  type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { router } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,6 +16,9 @@ import {
 } from "react-native";
 
 import { scheduleHabitReminder } from "@/core/notifications/notifications";
+import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
+import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
+import { Screen } from "@/presentation/components/Screen";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import { colors } from "@/theme/colors";
@@ -30,19 +32,8 @@ const COLOR_OPTIONS = [
   "#c06c84",
 ];
 
-const EMOJI_OPTIONS = ["🔥", "🌱", "⭐️", "📚", "💧", "💪"];
-
 type HabitType = "daily" | "weekly" | "monthly";
 type PickerTarget = "start" | "end";
-
-function parseHHmm(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  return {
-    hour: Number.isFinite(h) ? h : 8,
-    minute: Number.isFinite(m) ? m : 0,
-  };
-}
-
 
 function hhmmToMinutes(hhmm: string): number {
   const [hStr, mStr] = hhmm.split(":");
@@ -117,19 +108,19 @@ function DayOfMonthSelector({
 }
 
 export default function HabitNewScreen() {
-  const router = useRouter();
-  const bottomSheetRef = useRef<BottomSheet>(null);
-
   const { create, isLoading } = useCreateHabit();
 
-  const REMINDER_OPTIONS = [
-    { label: "Sin recordatorio", value: null as null | number },
-    { label: "Justo a la hora", value: 0 },
-    { label: "5 min antes", value: 5 },
-    { label: "10 min antes", value: 10 },
-    { label: "30 min antes", value: 30 },
-    { label: "1 hora antes", value: 60 },
-  ];
+  const REMINDER_OPTIONS = useMemo(
+    () => [
+      { label: "Sin recordatorio", value: null as null | number },
+      { label: "Justo a la hora", value: 0 },
+      { label: "5 min antes", value: 5 },
+      { label: "10 min antes", value: 10 },
+      { label: "30 min antes", value: 30 },
+      { label: "1 hora antes", value: 60 },
+    ],
+    []
+  );
 
   const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState<
     number | null
@@ -138,7 +129,10 @@ export default function HabitNewScreen() {
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("daily");
   const [color, setColor] = useState<string>(colors.primary);
+
+  // ✅ Ícono seleccionado (emoji)
   const [emoji, setEmoji] = useState<string>("🔥");
+  const [isEmojiSheetOpen, setIsEmojiSheetOpen] = useState(false);
 
   // ✅ Bloque horario
   const [startTime, setStartTime] = useState<string>("08:00");
@@ -152,6 +146,7 @@ export default function HabitNewScreen() {
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
+  const [isColorSheetOpen, setIsColorSheetOpen] = useState(false);
 
   // Weekly
   const todayIndex = new Date().getDay(); // 0-6
@@ -161,32 +156,11 @@ export default function HabitNewScreen() {
   const todayDayOfMonth = new Date().getDate(); // 1-31
   const [monthlyDays, setMonthlyDays] = useState<number[]>([todayDayOfMonth]);
 
-  // ✅ MÁS ALTO (antes 78%)
-  const snapPoints = useMemo(() => ["92%"], []);
-
-  const handleSheetChange = useCallback(
-    (index: number) => {
-      if (index === -1) router.back();
-    },
-    [router]
-  );
-
-  const handleClose = useCallback(() => {
-    router.back();
-  }, [router]);
-
-  const handleBackgroundPress = useCallback(() => {
-    bottomSheetRef.current?.close();
-    router.back();
-  }, [router]);
-
   const openPickerFor = useCallback(
     (target: PickerTarget) => {
       setPickerTarget(target);
-
       const current = target === "start" ? startTime : endTime;
       setPickerDate(buildDateForTime(current));
-
       setShowTimePicker(true);
     },
     [startTime, endTime]
@@ -200,23 +174,18 @@ export default function HabitNewScreen() {
       }
 
       const d = selectedDate ?? pickerDate;
-
       const hh = String(d.getHours()).padStart(2, "0");
       const mm = String(d.getMinutes()).padStart(2, "0");
       const picked = `${hh}:${mm}`;
 
       if (pickerTarget === "start") {
         setStartTime(picked);
-
         const startMin = hhmmToMinutes(picked);
         const endMin = hhmmToMinutes(endTime);
-        if (endMin <= startMin) {
-          setEndTime(minutesToHHmm(startMin + 30));
-        }
+        if (endMin <= startMin) setEndTime(minutesToHHmm(startMin + 30));
       } else {
         const startMin = hhmmToMinutes(startTime);
         const endMin = hhmmToMinutes(picked);
-
         if (endMin <= startMin) {
           Alert.alert(
             "Horario inválido",
@@ -271,7 +240,7 @@ export default function HabitNewScreen() {
       startTime,
       endTime,
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
-      monthlyDays: type === "monthly" ? monthlyDays : undefined, // ✅ ok
+      monthlyDays: type === "monthly" ? monthlyDays : undefined,
       reminderOffsetMinutes, // null = sin recordatorio
     };
 
@@ -287,9 +256,6 @@ export default function HabitNewScreen() {
       const hour = Number(hStr);
       const minute = Number(mStr);
 
-      // OJO: necesitamos el id real del hábito creado
-      // Asumo que `create(payload)` te devuelve el hábito o al menos el id.
-      // Ajusta según tu retorno:
       const createdHabitId = (result as any).habit?.id ?? (result as any).id;
 
       if (createdHabitId) {
@@ -315,257 +281,262 @@ export default function HabitNewScreen() {
     monthlyDays,
     reminderOffsetMinutes,
     create,
-    router,
   ]);
 
+  const isBlockingScroll = showTimePicker || isEmojiSheetOpen;
+
   return (
-    <View style={styles.overlay}>
-      <Pressable style={styles.backdrop} onPress={handleBackgroundPress} />
-
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <Screen>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.content}
+        scrollEnabled={!isBlockingScroll}
+        keyboardShouldPersistTaps="handled"
       >
-        <BottomSheet
-          ref={bottomSheetRef}
-          index={0}
-          snapPoints={snapPoints}
-          enablePanDownToClose={!showTimePicker}
-          onChange={handleSheetChange}
-          backgroundStyle={styles.sheetBackground}
-          handleIndicatorStyle={styles.handleIndicator}
-          keyboardBehavior="interactive"
-          keyboardBlurBehavior="restore"
-        >
-          {/* ✅ SCROLL DENTRO DEL SHEET */}
-          <BottomSheetScrollView
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-            scrollEnabled={!showTimePicker}
-            bounces={!showTimePicker}
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <Pressable
+            onPress={() => router.back()}
+            style={styles.backButton}
+            hitSlop={10}
           >
-            <View style={styles.headerRow}>
-              <Text style={styles.title}>Nuevo hábito</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {type === "daily"
-                    ? "Diario"
-                    : type === "weekly"
-                    ? "Semanal"
-                    : "Mensual"}
-                </Text>
-              </View>
-            </View>
+            <Text style={styles.backIcon}>‹</Text>
+            <Text style={styles.backText}>Volver</Text>
+          </Pressable>
 
-            <Text style={styles.subtitle}>
-              Define el hábito, el horario y (si quieres) un recordatorio.
+          <Text style={styles.headerTitle}>Nuevo hábito</Text>
+
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {type === "daily"
+                ? "Diario"
+                : type === "weekly"
+                ? "Semanal"
+                : "Mensual"}
             </Text>
+          </View>
+        </View>
 
-            {/* Nombre */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Nombre</Text>
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="Ej: Tomar agua"
-                placeholderTextColor={colors.mutedText}
-                style={styles.input}
+        <Text style={styles.subtitle}>
+          Define el hábito, el horario y (si quieres) un recordatorio.
+        </Text>
+
+        {/* Nombre */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Nombre</Text>
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Ej: Tomar agua"
+            placeholderTextColor={colors.mutedText}
+            style={styles.input}
+          />
+        </View>
+
+        {/* Frecuencia */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Frecuencia</Text>
+          <View style={styles.row}>
+            <ToggleChip
+              label="Diario"
+              active={type === "daily"}
+              onPress={() => setType("daily")}
+            />
+            <ToggleChip
+              label="Semanal"
+              active={type === "weekly"}
+              onPress={() => setType("weekly")}
+            />
+            <ToggleChip
+              label="Mensual"
+              active={type === "monthly"}
+              onPress={() => setType("monthly")}
+            />
+          </View>
+        </View>
+
+        {/* Días (solo semanal) */}
+        {type === "weekly" && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Días</Text>
+            <WeekdaySelector
+              selectedDays={weeklyDays}
+              onChange={setWeeklyDays}
+            />
+          </View>
+        )}
+
+        {/* Días del mes (solo mensual) */}
+        {type === "monthly" && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Días del mes</Text>
+            <Text style={styles.helper}>
+              Ej: 1, 15, 30. Si el mes no tiene 31, se usa el último día.
+            </Text>
+            <DayOfMonthSelector
+              selectedDays={monthlyDays}
+              onChange={setMonthlyDays}
+            />
+          </View>
+        )}
+
+        {/* Horario */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Horario</Text>
+
+          <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+            <Pressable
+              style={styles.timeButton}
+              onPress={() => openPickerFor("start")}
+            >
+              <Text style={styles.timeButtonText}>{startTime}</Text>
+              <View style={styles.timePill}>
+                <Text style={styles.timePillText}>Inicio</Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={styles.timeButton}
+              onPress={() => openPickerFor("end")}
+            >
+              <Text style={styles.timeButtonText}>{endTime}</Text>
+              <View style={styles.timePill}>
+                <Text style={styles.timePillText}>Fin</Text>
+              </View>
+            </Pressable>
+          </View>
+
+          {showTimePicker && (
+            <View style={styles.timePickerContainer}>
+              <DateTimePicker
+                value={pickerDate}
+                mode="time"
+                is24Hour
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={handleTimeChange}
+                themeVariant="dark"
               />
-            </View>
 
-            {/* Tipo */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Frecuencia</Text>
-              <View style={styles.row}>
-                <ToggleChip
-                  label="Diario"
-                  active={type === "daily"}
-                  onPress={() => setType("daily")}
-                />
-                <ToggleChip
-                  label="Semanal"
-                  active={type === "weekly"}
-                  onPress={() => setType("weekly")}
-                />
-                <ToggleChip
-                  label="Mensual"
-                  active={type === "monthly"}
-                  onPress={() => setType("monthly")}
-                />
-              </View>
-            </View>
-
-            {/* Días (solo semanal) */}
-            {type === "weekly" && (
-              <View style={styles.field}>
-                <Text style={styles.label}>Días</Text>
-                <WeekdaySelector
-                  selectedDays={weeklyDays}
-                  onChange={setWeeklyDays}
-                />
-              </View>
-            )}
-
-            {/* Días del mes (solo mensual) */}
-            {type === "monthly" && (
-              <View style={styles.field}>
-                <Text style={styles.label}>Días del mes</Text>
-                <Text style={styles.helper}>
-                  Ej: 1, 15, 30. Si el mes no tiene 31, se usa el último día.
-                </Text>
-                <DayOfMonthSelector
-                  selectedDays={monthlyDays}
-                  onChange={setMonthlyDays}
-                />
-              </View>
-            )}
-
-            {/* Horario */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Horario</Text>
-
-              <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
+              {Platform.OS === "ios" && (
                 <Pressable
-                  style={styles.timeButton}
-                  onPress={() => openPickerFor("start")}
+                  style={styles.timeDoneButton}
+                  onPress={() => setShowTimePicker(false)}
                 >
-                  <Text style={styles.timeButtonText}>{startTime}</Text>
-                  <View style={styles.timePill}>
-                    <Text style={styles.timePillText}>Inicio</Text>
-                  </View>
+                  <Text style={styles.timeDoneText}>Listo</Text>
                 </Pressable>
-
-                <Pressable
-                  style={styles.timeButton}
-                  onPress={() => openPickerFor("end")}
-                >
-                  <Text style={styles.timeButtonText}>{endTime}</Text>
-                  <View style={styles.timePill}>
-                    <Text style={styles.timePillText}>Fin</Text>
-                  </View>
-                </Pressable>
-              </View>
-
-              {showTimePicker && (
-                <View style={styles.timePickerContainer}>
-                  <DateTimePicker
-                    value={pickerDate}
-                    mode="time"
-                    is24Hour
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={handleTimeChange}
-                    themeVariant="dark"
-                  />
-
-                  {Platform.OS === "ios" && (
-                    <Pressable
-                      style={styles.timeDoneButton}
-                      onPress={() => setShowTimePicker(false)}
-                    >
-                      <Text style={styles.timeDoneText}>Listo</Text>
-                    </Pressable>
-                  )}
-                </View>
               )}
             </View>
+          )}
+        </View>
 
-            {/* Recordatorio */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Recordatorio</Text>
-              <View style={styles.row}>
-                {REMINDER_OPTIONS.map((opt) => {
-                  const active = reminderOffsetMinutes === opt.value;
-                  return (
-                    <Pressable
-                      key={String(opt.value)}
-                      onPress={() => setReminderOffsetMinutes(opt.value)}
-                      style={[styles.chip, active && styles.chipActive]}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          active && styles.chipTextActive,
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Color */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Color</Text>
-              <View style={styles.row}>
-                {COLOR_OPTIONS.map((c) => (
-                  <Pressable
-                    key={c}
-                    onPress={() => setColor(c)}
-                    style={[
-                      styles.colorDot,
-                      { backgroundColor: c },
-                      color === c && styles.colorDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-
-            {/* Emoji */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Ícono</Text>
-              <View style={styles.row}>
-                {EMOJI_OPTIONS.map((e) => (
-                  <Pressable
-                    key={e}
-                    onPress={() => setEmoji(e)}
-                    style={[
-                      styles.emojiChip,
-                      emoji === e && styles.emojiChipActive,
-                    ]}
+        {/* Recordatorio */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Recordatorio</Text>
+          <View style={styles.row}>
+            {REMINDER_OPTIONS.map((opt) => {
+              const active = reminderOffsetMinutes === opt.value;
+              return (
+                <Pressable
+                  key={String(opt.value)}
+                  onPress={() => setReminderOffsetMinutes(opt.value)}
+                  style={[styles.chip, active && styles.chipActive]}
+                >
+                  <Text
+                    style={[styles.chipText, active && styles.chipTextActive]}
                   >
-                    <Text style={styles.emoji}>{e}</Text>
-                  </Pressable>
-                ))}
-              </View>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Color */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Color</Text>
+
+          <View style={styles.iconPickerRow}>
+            <View style={[styles.iconPreview, { backgroundColor: color }]} />
+            <Pressable
+              onPress={() => setIsColorSheetOpen(true)}
+              style={styles.iconPickerButton}
+              hitSlop={10}
+            >
+              <Text style={styles.iconPickerButtonText}>Elegir color</Text>
+            </Pressable>
+          </View>
+        </View>
+        <ColorPickerSheet
+          visible={isColorSheetOpen}
+          value={color}
+          onClose={() => setIsColorSheetOpen(false)}
+          onSelect={(c) => setColor(c)}
+        />
+
+        {/* Ícono */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Ícono</Text>
+
+          <View style={styles.iconPickerRow}>
+            <View style={styles.iconPreview}>
+              <Text style={styles.iconPreviewText}>{emoji || "🙂"}</Text>
             </View>
 
-            {/* Botones */}
-            <View style={styles.footerRow}>
-              <Pressable
-                style={styles.cancelButton}
-                onPress={handleClose}
-                disabled={isLoading}
-              >
-                <Text style={styles.cancelText}>Cancelar</Text>
-              </Pressable>
+            <Pressable
+              onPress={() => setIsEmojiSheetOpen(true)}
+              style={styles.iconPickerButton}
+              hitSlop={10}
+            >
+              <Text style={styles.iconPickerButtonText}>
+                {emoji ? "Cambiar ícono" : "Elegir ícono"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
 
-              <Pressable
-                style={[styles.primaryButton, isLoading && { opacity: 0.6 }]}
-                onPress={handleSubmit}
-                disabled={isLoading}
-              >
-                <Text style={styles.primaryText}>
-                  {isLoading ? "Guardando..." : "Guardar hábito"}
-                </Text>
-              </Pressable>
-            </View>
-          </BottomSheetScrollView>
-        </BottomSheet>
-      </KeyboardAvoidingView>
-    </View>
+        {/* Footer */}
+        <View style={styles.footerRow}>
+          <Pressable
+            style={styles.cancelButton}
+            onPress={() => router.back()}
+            disabled={isLoading}
+          >
+            <Text style={styles.cancelText}>Cancelar</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.primaryButton, isLoading && { opacity: 0.6 }]}
+            onPress={handleSubmit}
+            disabled={isLoading}
+          >
+            <Text style={styles.primaryText}>
+              {isLoading ? "Guardando..." : "Guardar hábito"}
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+
+      {/* ✅ BottomSheetModal del emoji (ya NO está dentro de otro sheet) */}
+      <EmojiPickerSheet
+        visible={isEmojiSheetOpen}
+        value={emoji}
+        onClose={() => setIsEmojiSheetOpen(false)}
+        onSelect={(e) => setEmoji(e)}
+      />
+    </Screen>
   );
 }
 
-type ToggleChipProps = {
+function ToggleChip({
+  label,
+  active,
+  onPress,
+}: {
   label: string;
   active: boolean;
   onPress: () => void;
-};
-
-function ToggleChip({ label, active, onPress }: ToggleChipProps) {
+}) {
   return (
     <Pressable
       onPress={onPress}
@@ -579,28 +550,7 @@ function ToggleChip({ label, active, onPress }: ToggleChipProps) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: "transparent" },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.65)",
-  },
-
-  sheetBackground: {
-    backgroundColor: colors.surface,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  handleIndicator: {
-    backgroundColor: colors.border,
-    width: 44,
-  },
-
-  // ✅ Importante: paddingBottom grande para que el último botón nunca quede tapado
   content: {
-    paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 48,
     gap: 12,
@@ -611,12 +561,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+    marginBottom: 4,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(50,73,86,0.40)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  backIcon: {
     color: colors.text,
+    fontSize: 18,
+    marginRight: 2,
+    fontWeight: "900",
   },
+  backText: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  headerTitle: { color: colors.text, fontSize: 18, fontWeight: "900" },
+
   subtitle: {
     marginTop: -6,
     fontSize: 13,
@@ -632,14 +598,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(230,188,1,0.35)",
   },
-  badgeText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: "600",
-  },
+  badgeText: { fontSize: 12, color: colors.primary, fontWeight: "800" },
 
   field: { gap: 8, marginTop: 6 },
-  label: { fontSize: 13, color: colors.mutedText, fontWeight: "600" },
+  label: { fontSize: 13, color: colors.mutedText, fontWeight: "900" },
   helper: { fontSize: 12, color: colors.mutedText, lineHeight: 16 },
 
   input: {
@@ -651,6 +613,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 14,
     backgroundColor: "rgba(43,62,74,0.35)",
+    fontWeight: "700",
   },
 
   row: {
@@ -672,8 +635,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(230,188,1,0.18)",
     borderColor: "rgba(230,188,1,0.55)",
   },
-  chipText: { fontSize: 13, color: colors.text },
-  chipTextActive: { color: colors.primary, fontWeight: "700" },
+  chipText: { fontSize: 13, color: colors.text, fontWeight: "800" },
+  chipTextActive: { color: colors.primary, fontWeight: "900" },
 
   timeButton: {
     borderRadius: 14,
@@ -687,7 +650,7 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "rgba(43,62,74,0.25)",
   },
-  timeButtonText: { fontSize: 16, color: colors.text, fontWeight: "700" },
+  timeButtonText: { fontSize: 16, color: colors.text, fontWeight: "900" },
   timePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -696,7 +659,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(241,233,215,0.16)",
   },
-  timePillText: { color: colors.text, fontSize: 12, fontWeight: "600" },
+  timePillText: { color: colors.text, fontSize: 12, fontWeight: "800" },
 
   colorDot: {
     width: 28,
@@ -707,19 +670,34 @@ const styles = StyleSheet.create({
   },
   colorDotActive: { borderColor: colors.text },
 
-  emojiChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
+  // ✅ Ícono picker UI
+  iconPickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iconPreview: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(43,62,74,0.35)",
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "rgba(43,62,74,0.25)",
   },
-  emojiChipActive: {
-    backgroundColor: "rgba(142,205,110,0.12)",
-    borderColor: "rgba(142,205,110,0.55)",
+  iconPreviewText: { fontSize: 26 },
+  iconPickerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  emoji: { fontSize: 20 },
+  iconPickerButtonText: { color: colors.text, fontSize: 13, fontWeight: "900" },
 
   footerRow: {
     flexDirection: "row",
@@ -735,7 +713,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: "rgba(43,62,74,0.20)",
   },
-  cancelText: { color: colors.text, fontSize: 14, fontWeight: "600" },
+  cancelText: { color: colors.text, fontSize: 14, fontWeight: "800" },
 
   primaryButton: {
     paddingHorizontal: 18,
@@ -743,7 +721,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.primary,
   },
-  primaryText: { color: colors.bg, fontSize: 14, fontWeight: "800" },
+  primaryText: { color: colors.bg, fontSize: 14, fontWeight: "900" },
 
   timePickerContainer: {
     marginTop: 8,
@@ -764,18 +742,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(241,233,215,0.18)",
     backgroundColor: "rgba(241,233,215,0.08)",
   },
-  timeDoneText: {
-    fontSize: 13,
-    color: colors.text,
-    fontWeight: "700",
-  },
+  timeDoneText: { fontSize: 13, color: colors.text, fontWeight: "900" },
 
   // 📅 grid mensual
-  domGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  domGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   domChip: {
     width: 40,
     height: 34,
@@ -790,6 +760,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(230,188,1,0.18)",
     borderColor: "rgba(230,188,1,0.55)",
   },
-  domChipText: { color: colors.text, fontWeight: "700", fontSize: 12 },
+  domChipText: { color: colors.text, fontWeight: "800", fontSize: 12 },
   domChipTextActive: { color: colors.primary, fontWeight: "900" },
 });

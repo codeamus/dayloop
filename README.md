@@ -103,54 +103,94 @@ Configuración clave usada en app.json:
 
 ---
 
-## 🌿 Flujo de ramas
+## 🌿 Flujo de ramas (definitivo)
 
-    feature/* → develop → main
+Objetivo:
+- `main`: publicar a stores (producción)
+- `preview`: TestFlight + Play Store testers internos
+- `develop`: desarrollo interno (dev client / builds internos)
 
-- feature/*: desarrollo de features y fixes
-- develop: integración + OTA preview
-- main: producción (OTA production o build)
+Flujo:
+
+    feature/* → develop → preview → main
 
 Reglas:
 - No se hace push directo a main
-- Todo entra vía Pull Request
-- main está protegido con approvals
-- develop está protegido contra force-push
+- main solo recibe PR desde preview
+- preview solo recibe PR desde develop
+- develop recibe PR desde feature/*
 
 ---
 
-## 🧪 Workflows (EAS)
+## 🧪 Perfiles EAS (build + submit)
 
-Se utilizan workflows declarativos con EAS:
+### Development (develop)
+Uso: pruebas internas rápidas con Dev Client.
 
-- Preview OTA  
-  Publica updates OTA en el branch develop
+Build:
+    npx eas build --profile development --platform ios
+    npx eas build --profile development --platform android
 
-- Deploy a producción  
-  - Si hay cambios nativos → build + submit  
-  - Si no hay cambios nativos → OTA production
+Canal OTA:
+- `channel: develop`
 
-- Auto-increment  
-  - ios.buildNumber  
-  - android.versionCode
+---
+
+### Preview (preview)
+Uso: TestFlight + Play Store testers internos (release-like, pero no producción).
+
+Build:
+    npx eas build --profile preview --platform ios
+    npx eas build --profile preview --platform android
+
+Submit:
+    npx eas submit --profile preview --platform ios
+    npx eas submit --profile preview --platform android
+
+Tracks:
+- Android: `internal`
+- iOS: TestFlight (App Store Connect)
+
+Canal OTA:
+- `channel: preview`
+
+---
+
+### Production (main)
+Uso: Stores (producción real).
+
+Build:
+    npx eas build --profile production --platform ios
+    npx eas build --profile production --platform android
+
+Submit:
+    npx eas submit --profile production --platform ios
+    npx eas submit --profile production --platform android
+
+Tracks:
+- Android: `production`
+- iOS: App Store (review)
+
+Canal OTA:
+- `channel: production`
 
 ---
 
 ## 📦 Versionado
 
-- expo.version: versión visible al usuario (ej: 1.0.5)
-- Solo se incrementa cuando:
-  - hay cambios nativos
-  - hay breaking changes
-  - se requiere cortar compatibilidad OTA
+- `expo.version`: versión visible al usuario (ej: 1.0.5)
+- Solo se incrementa al mergear a `main` (release)
+- `autoIncrement: true` maneja:
+  - iOS `buildNumber`
+  - Android `versionCode`
 
-Cambios solo JS/UI → NO subir versión (usar OTA).
+Cambios solo JS/UI → OTA (no requiere subir versión, mientras no cambie runtimeVersion).
 
 ---
 
 ## 🧾 Pull Requests
 
-Todos los Pull Requests usan un template obligatorio que incluye:
+Todos los PRs usan template obligatorio que incluye:
 - Tipo de cambio
 - Checklist de pruebas
 - Decisión explícita entre OTA o Build
@@ -168,18 +208,24 @@ Desarrollo:
 Build local:
     pnpm expo prebuild
 
-OTA manual (si fuese necesario):
-    npx expo publish
+EAS build (preview):
+    npx eas build --profile preview
 
-EAS build producción:
+EAS submit (preview):
+    npx eas submit --profile preview
+
+EAS build (producción):
     npx eas build --profile production
+
+EAS submit (producción):
+    npx eas submit --profile production
 
 ---
 
 ## 📱 Plataformas soportadas
 
-- iOS (device / TestFlight)
-- Android (internal / Play Store)
+- iOS (device / TestFlight / App Store)
+- Android (internal testing / Play Store)
 
 ---
 

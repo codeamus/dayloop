@@ -17,6 +17,7 @@ import { ToastProvider } from "@/presentation/components/ToastProvider";
 import { useOnboardingGate } from "@/presentation/hooks/useOnboardingGate";
 import { colors } from "@/theme/colors";
 import { useAppFonts } from "@/theme/fonts";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 
 // Android navigation bar (abajo)
 const ANDROID_NAV_BG = colors.bg;
@@ -106,30 +107,35 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider style={{ backgroundColor: colors.bg }}>
       <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ToastProvider>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.bg },
-            }}
-          >
-            {/* Onboarding: ruta real */}
-            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-
-            {/* Tabs */}
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-            {/* MODAL: Crear hábito */}
-            <Stack.Screen
-              name="habit-new"
-              options={{
-                presentation: "transparentModal",
-                animation: "fade",
-                contentStyle: { backgroundColor: "transparent" },
+        <BottomSheetModalProvider>
+          <ToastProvider>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.bg },
               }}
-            />
-          </Stack>
-        </ToastProvider>
+            >
+              {/* Onboarding: ruta real */}
+              <Stack.Screen
+                name="onboarding"
+                options={{ headerShown: false }}
+              />
+
+              {/* Tabs */}
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+              <Stack.Screen
+                name="habit-new"
+                options={{
+                  headerShown: false,
+                  presentation: "card", // ✅ screen normal
+                  animation: "slide_from_right", // o "fade"
+                  contentStyle: { backgroundColor: colors.bg },
+                }}
+              />
+            </Stack>
+          </ToastProvider>
+        </BottomSheetModalProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );

@@ -3,6 +3,7 @@ import type { HabitSchedule } from "@/domain/entities/Habit";
 import { Screen } from "@/presentation/components/Screen";
 import { useAllHabits } from "@/presentation/hooks/useAllHabits";
 import { colors } from "@/theme/colors";
+import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -71,14 +72,6 @@ function formatTime(h: any): string | null {
   return null;
 }
 
-function RightActions({ onDelete }: { onDelete: () => void }) {
-  return (
-    <Pressable onPress={onDelete} style={styles.deleteAction}>
-      <Text style={styles.deleteText}>Eliminar</Text>
-    </Pressable>
-  );
-}
-
 function Chip({
   label,
   active,
@@ -112,18 +105,32 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
   );
 }
 
-function Pill({ label, tone }: { label: string; tone: "primary" | "soft" }) {
+function Pill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "primary" | "soft" | "paused";
+}) {
   return (
     <View
       style={[
         styles.pill,
-        tone === "primary" ? styles.pillPrimary : styles.pillSoft,
+        tone === "primary"
+          ? styles.pillPrimary
+          : tone === "paused"
+          ? styles.pillPaused
+          : styles.pillSoft,
       ]}
     >
       <Text
         style={[
           styles.pillText,
-          tone === "primary" ? styles.pillTextPrimary : styles.pillTextSoft,
+          tone === "primary"
+            ? styles.pillTextPrimary
+            : tone === "paused"
+            ? styles.pillTextPaused
+            : styles.pillTextSoft,
         ]}
       >
         {label}
@@ -132,8 +139,47 @@ function Pill({ label, tone }: { label: string; tone: "primary" | "soft" }) {
   );
 }
 
+function RightActions({
+  paused,
+  height,
+  onTogglePause,
+  onDelete,
+}: {
+  paused: boolean;
+  height: number;
+  onTogglePause: () => void;
+  onDelete: () => void;
+}) {
+  const h = Math.max(76, height || 0);
+
+  return (
+    <View style={[styles.actionsPanel, { height: h }]}>
+      <Pressable
+        onPress={onTogglePause}
+        style={[
+          styles.actionRow,
+          paused ? styles.actionResume : styles.actionPause,
+        ]}
+      >
+        <Text style={[styles.actionText, paused && styles.actionTextResume]}>
+          {paused ? "Reanudar" : "Pausar"}
+        </Text>
+      </Pressable>
+
+      <View style={styles.actionDivider} />
+
+      <Pressable
+        onPress={onDelete}
+        style={[styles.actionRow, styles.actionDel]}
+      >
+        <Text style={styles.actionText}>Eliminar</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function HabitsListScreen() {
-  const { habits, loading, remove } = useAllHabits();
+  const { habits, loading, remove, setPaused } = useAllHabits();
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -145,6 +191,23 @@ export default function HabitsListScreen() {
       [
         { text: "Cancelar", style: "cancel" },
         { text: "Eliminar", style: "destructive", onPress: () => remove(id) },
+      ]
+    );
+  }
+
+  function confirmTogglePause(h: any) {
+    const paused = !!h?.isPaused;
+    Alert.alert(
+      paused ? "Reanudar hábito" : "Pausar hábito",
+      paused
+        ? `¿Reanudar "${h.name}"? Volverás a recibir recordatorios.`
+        : `¿Pausar "${h.name}"? No recibirás recordatorios hasta reanudarlo.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: paused ? "Reanudar" : "Pausar",
+          onPress: () => setPaused(h.id, !paused),
+        },
       ]
     );
   }
@@ -195,7 +258,6 @@ export default function HabitsListScreen() {
 
   return (
     <Screen>
-      {/* HEADER ROW (solo botones) */}
       <View style={styles.headerRow}>
         <Pressable
           onPress={() => router.replace("/(tabs)")}
@@ -218,7 +280,6 @@ export default function HabitsListScreen() {
         </Pressable>
       </View>
 
-      {/* ✅ HEADER CENTER movido antes del search */}
       <View style={styles.headerCenterBlock}>
         <Text style={styles.headerSubtitle}>
           {stats.total} total · {stats.daily} diarios · {stats.weekly} semanales
@@ -226,9 +287,8 @@ export default function HabitsListScreen() {
         </Text>
       </View>
 
-      {/* SEARCH */}
       <View style={styles.searchBox}>
-        <Text style={styles.searchIcon}>⌕</Text>
+        <Feather name="search" size={16} color={"rgba(241,233,215,0.55)"} />
         <TextInput
           value={query}
           onChangeText={setQuery}
@@ -249,7 +309,6 @@ export default function HabitsListScreen() {
         )}
       </View>
 
-      {/* FILTER CHIPS */}
       <View style={styles.chipsRow}>
         <Chip
           label="Todos"
@@ -273,7 +332,6 @@ export default function HabitsListScreen() {
         />
       </View>
 
-      {/* EMPTY STATES */}
       {habits.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyTitle}>Aún no tienes hábitos</Text>
@@ -323,6 +381,7 @@ export default function HabitsListScreen() {
                   h={h}
                   onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
                   onDelete={() => confirmDelete(h.id, h.name)}
+                  onTogglePause={() => confirmTogglePause(h)}
                 />
               ))}
             </>
@@ -337,6 +396,7 @@ export default function HabitsListScreen() {
                   h={h}
                   onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
                   onDelete={() => confirmDelete(h.id, h.name)}
+                  onTogglePause={() => confirmTogglePause(h)}
                 />
               ))}
             </>
@@ -354,6 +414,7 @@ export default function HabitsListScreen() {
                   h={h}
                   onPress={() => router.push(`/(tabs)/habits/${h.id}`)}
                   onDelete={() => confirmDelete(h.id, h.name)}
+                  onTogglePause={() => confirmTogglePause(h)}
                 />
               ))}
             </>
@@ -368,53 +429,88 @@ function HabitCard({
   h,
   onPress,
   onDelete,
+  onTogglePause,
 }: {
   h: any;
   onPress: () => void;
   onDelete: () => void;
+  onTogglePause: () => void;
 }) {
   const t = scheduleType(h.schedule);
   const label = typeLabel(t);
   const time = formatTime(h);
   const detail = scheduleDetail(h.schedule);
+  const paused = !!h?.isPaused;
+
+  const [height, setHeight] = useState(0);
 
   return (
-    <Swipeable
-      overshootRight={false}
-      renderRightActions={() => <RightActions onDelete={onDelete} />}
-    >
-      <Pressable style={styles.card} onPress={onPress}>
-        <View
-          style={[
-            styles.cardBar,
-            { backgroundColor: h.color || colors.primary },
-          ]}
-        />
+    <View style={styles.itemWrap}>
+      <Swipeable
+        overshootRight={false}
+        renderRightActions={() => (
+          <RightActions
+            paused={paused}
+            height={height}
+            onTogglePause={onTogglePause}
+            onDelete={onDelete}
+          />
+        )}
+      >
+        <Pressable
+          onLayout={(e) => {
+            const next = Math.round(e.nativeEvent.layout.height);
+            if (next > 0 && next !== height) setHeight(next);
+          }}
+          style={[styles.card, paused && styles.cardPaused]}
+          onPress={onPress}
+        >
+          <View
+            style={[
+              styles.cardBar,
+              {
+                backgroundColor: h.color || colors.primary,
+                opacity: paused ? 0.5 : 0.95,
+              },
+            ]}
+          />
 
-        <View style={styles.cardMain}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {h.name}
-          </Text>
+          <View style={styles.cardMain}>
+            <Text
+              style={[styles.cardTitle, paused && styles.cardTitlePaused]}
+              numberOfLines={1}
+            >
+              {h.name}
+            </Text>
 
-          <View style={styles.cardMeta}>
-            <Pill label={label} tone="primary" />
-            {!!time && <Pill label={time} tone="soft" />}
-            {!!detail && (
-              <Text style={styles.cardDetail} numberOfLines={1}>
-                {detail}
+            <View style={styles.cardMeta}>
+              <Pill label={label} tone="primary" />
+              {!!time && <Pill label={time} tone="soft" />}
+              {paused && <Pill label="Pausado" tone="paused" />}
+              {!!detail && (
+                <Text
+                  style={[styles.cardDetail, paused && styles.cardDetailPaused]}
+                  numberOfLines={1}
+                >
+                  {detail}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.cardRight}>
+            <View
+              style={[styles.iconBubble, paused && styles.iconBubblePaused]}
+            >
+              <Text style={[styles.cardIcon, paused && styles.cardIconPaused]}>
+                {h.icon}
               </Text>
-            )}
+            </View>
+            <Text style={styles.cardChev}>›</Text>
           </View>
-        </View>
-
-        <View style={styles.cardRight}>
-          <View style={styles.iconBubble}>
-            <Text style={styles.cardIcon}>{h.icon}</Text>
-          </View>
-          <Text style={styles.cardChev}>›</Text>
-        </View>
-      </Pressable>
-    </Swipeable>
+        </Pressable>
+      </Swipeable>
+    </View>
   );
 }
 
@@ -422,7 +518,6 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   loadingText: { color: colors.mutedText, fontSize: 13 },
 
-  // ✅ HEADER SOLO BOTONES
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -444,11 +539,7 @@ const styles = StyleSheet.create({
   headerBtnText: { color: colors.text, fontWeight: "900", fontSize: 13 },
   headerBtnTextPrimary: { color: colors.primary },
 
-  // ✅ BLOQUE CENTRAL NUEVO (antes del search)
-  headerCenterBlock: {
-    alignItems: "center",
-    marginBottom: 12,
-  },
+  headerCenterBlock: { alignItems: "center", marginBottom: 12 },
   headerTitle: { color: colors.text, fontSize: 20, fontWeight: "900" },
   headerSubtitle: {
     marginTop: 6,
@@ -470,11 +561,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 12,
-  },
-  searchIcon: {
-    color: "rgba(241,233,215,0.55)",
-    fontSize: 16,
-    fontWeight: "900",
   },
   searchInput: {
     flex: 1,
@@ -569,8 +655,9 @@ const styles = StyleSheet.create({
   },
   emptyCtaText: { color: colors.primaryText, fontSize: 14, fontWeight: "900" },
 
+  itemWrap: { marginTop: 10 },
+
   card: {
-    marginTop: 10,
     borderRadius: 18,
     backgroundColor: "rgba(50,73,86,0.45)",
     borderWidth: 1,
@@ -579,10 +666,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    overflow: "hidden",
+    minHeight: 76,
   },
-  cardBar: { width: 4, alignSelf: "stretch", borderRadius: 999, opacity: 0.95 },
+  cardPaused: { backgroundColor: "rgba(50,73,86,0.30)" },
+
+  cardBar: { width: 4, alignSelf: "stretch", borderRadius: 999 },
   cardMain: { flex: 1, paddingRight: 6 },
   cardTitle: { color: colors.text, fontSize: 15, fontWeight: "900" },
+  cardTitlePaused: { opacity: 0.75 },
+
   cardMeta: {
     marginTop: 10,
     flexDirection: "row",
@@ -595,6 +688,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
   },
+  cardDetailPaused: { opacity: 0.7 },
 
   pill: {
     borderRadius: 999,
@@ -610,9 +704,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(241,233,215,0.10)",
     borderColor: "rgba(241,233,215,0.18)",
   },
+  pillPaused: {
+    backgroundColor: "rgba(241,233,215,0.06)",
+    borderColor: "rgba(241,233,215,0.14)",
+  },
+
   pillText: { fontSize: 12, fontWeight: "900" },
   pillTextPrimary: { color: colors.primary },
   pillTextSoft: { color: colors.text },
+  pillTextPaused: { color: "rgba(241,233,215,0.85)" },
 
   cardRight: {
     flexDirection: "row",
@@ -630,20 +730,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(241,233,215,0.16)",
   },
+  iconBubblePaused: { opacity: 0.65 },
   cardIcon: { fontSize: 18 },
+  cardIconPaused: { opacity: 0.65 },
   cardChev: {
     color: "rgba(241,233,215,0.55)",
     fontSize: 32,
     fontWeight: "900",
   },
 
-  deleteAction: {
-    backgroundColor: colors.danger,
-    justifyContent: "center",
-    alignItems: "flex-end",
-    paddingHorizontal: 20,
-    marginTop: 10,
+  actionsPanel: {
+    width: 130,
+    marginLeft: 10,
     borderRadius: 18,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(50,73,86,0.45)",
   },
-  deleteText: { color: colors.text, fontWeight: "900" },
+  actionRow: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  actionDivider: {
+    height: 1,
+    backgroundColor: "rgba(241,233,215,0.12)",
+  },
+  actionPause: { backgroundColor: "rgba(241,233,215,0.08)" },
+  actionResume: { backgroundColor: "rgba(230,188,1,0.14)" },
+  actionDel: { backgroundColor: "rgba(255,90,90,0.18)" },
+  actionText: {
+    color: colors.text,
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  actionTextResume: { color: colors.primary },
 });

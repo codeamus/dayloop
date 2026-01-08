@@ -1,13 +1,15 @@
 // app/onboarding.tsx
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
   Easing,
   Image,
   Pressable,
+  Image as RNImage,
+  ScrollView,
   Text,
   View,
 } from "react-native";
@@ -47,7 +49,15 @@ export default function OnboardingScreen() {
   const [stepIndex, setStepIndex] = useState(0);
   const [busy, setBusy] = useState(false);
 
-  // Animación: fade + slide
+  // ✅ Preload imágenes (mejora el "lag" al cambiar step)
+  useEffect(() => {
+    images.forEach((img) => {
+      const uri = RNImage.resolveAssetSource(img)?.uri;
+      if (uri) RNImage.prefetch(uri);
+    });
+  }, []);
+
+  // Animación: fade + slide (solo texto, para que la imagen se sienta instantánea)
   const opacity = useRef(new Animated.Value(1)).current;
   const translateY = useRef(new Animated.Value(0)).current;
 
@@ -143,18 +153,7 @@ export default function OnboardingScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Header */}
-      <View style={{ paddingTop: 44, paddingHorizontal: 20 }}>
-        <Text
-          style={{
-            color: colors.mutedText,
-            fontSize: 12,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-          }}
-        >
-          DAYLOOP
-        </Text>
-
+      <View style={{ paddingTop: 64, paddingHorizontal: 20 }}>
         {/* Progress bar */}
         <View
           style={{
@@ -176,118 +175,134 @@ export default function OnboardingScreen() {
         </View>
       </View>
 
-      {/* Content (animated) */}
-      <Animated.View
-        style={{
-          flex: 1,
-          paddingHorizontal: 20,
-          paddingTop: 14,
-          opacity,
-          transform: [{ translateY }],
-        }}
-      >
-        <Text
-          style={{
-            color: colors.text,
-            fontSize: 30,
-            fontWeight: "800",
-            lineHeight: 34,
-            marginTop: 10,
+      {/* Content */}
+      <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 14 }}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingHorizontal: 20,
+            paddingTop: 14,
+            paddingBottom: 14, // aire antes del footer fijo
           }}
+          showsVerticalScrollIndicator={false}
         >
-          {step.title}
-        </Text>
-
-        <Text
-          style={{
-            color: colors.mutedText,
-            fontSize: 16,
-            lineHeight: 22,
-            marginTop: 10,
-          }}
-        >
-          {step.body}
-        </Text>
-
-        {/* Card imagen (SIN doble marco, estilo "premium") */}
-        <View
-          style={{
-            marginTop: 22,
-            borderRadius: 24,
-            backgroundColor: colors.surface,
-            overflow: "hidden",
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}
-        >
-          <View style={{ height: 320, backgroundColor: colors.surfaceAlt }}>
-            <Image
-              source={images[stepIndex]}
-              resizeMode="cover" // ✅ integra mejor que contain
-              style={{ width: "100%", height: "100%" }}
-            />
-
-            {/* Overlay suave para integrar con dark theme */}
-            <View
-              pointerEvents="none"
+          {/* ✅ Texto animado (la imagen NO se anima para que se sienta instantánea) */}
+          <Animated.View
+            style={{
+              opacity,
+              transform: [{ translateY }],
+            }}
+          >
+            <Text
               style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 120,
-                backgroundColor: "rgba(43,62,74,0.45)", // approx colors.bg
-              }}
-            />
-
-            {/* Caption sobre overlay */}
-            <View
-              style={{
-                position: "absolute",
-                left: 14,
-                right: 14,
-                bottom: 12,
-                paddingVertical: 10,
-                paddingHorizontal: 12,
-                borderRadius: 14,
-                backgroundColor: colors.surfaceOverlay,
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.06)",
+                color: colors.text,
+                fontSize: 30,
+                fontWeight: "800",
+                lineHeight: 34,
+                marginTop: 10,
               }}
             >
-              <Text
-                style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}
+              {step.title}
+            </Text>
+
+            <Text
+              style={{
+                color: colors.mutedText,
+                fontSize: 16,
+                lineHeight: 22,
+                marginTop: 10,
+              }}
+            >
+              {step.body}
+            </Text>
+          </Animated.View>
+
+          {/* ✅ Imagen SIN animación + fadeDuration 0 (Android) */}
+          <View
+            style={{
+              marginTop: 22,
+              borderRadius: 24,
+              backgroundColor: colors.surface,
+              overflow: "hidden",
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          >
+            <View style={{ height: 320, backgroundColor: colors.surfaceAlt }}>
+              <Image
+                source={images[stepIndex]}
+                resizeMode="cover"
+                fadeDuration={0} // ✅ elimina fade interno Android
+                style={{ width: "100%", height: "100%" }}
+              />
+
+              {/* Overlay suave para integrar con dark theme */}
+              <View
+                pointerEvents="none"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 120,
+                  backgroundColor: "rgba(43,62,74,0.45)",
+                }}
+              />
+
+              {/* Caption sobre overlay */}
+              <View
+                style={{
+                  position: "absolute",
+                  left: 14,
+                  right: 14,
+                  bottom: 12,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: 14,
+                  backgroundColor: colors.surfaceOverlay,
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.06)",
+                }}
               >
-                {step.caption}
-              </Text>
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 13,
+                    fontWeight: "700",
+                  }}
+                >
+                  {step.caption}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Dots */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: 8,
-            marginTop: 14,
-          }}
-        >
-          {[0, 1, 2].map((i) => (
-            <View
-              key={i}
-              style={{
-                width: i === stepIndex ? 18 : 8,
-                height: 8,
-                borderRadius: 999,
-                backgroundColor:
-                  i === stepIndex ? colors.primary : colors.divider,
-                opacity: i === stepIndex ? 1 : 0.6,
-              }}
-            />
-          ))}
-        </View>
-      </Animated.View>
+          {/* Dots */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              gap: 8,
+              marginTop: 14,
+            }}
+          >
+            {[0, 1, 2].map((i) => (
+              <View
+                key={i}
+                style={{
+                  width: i === stepIndex ? 18 : 8,
+                  height: 8,
+                  borderRadius: 999,
+                  backgroundColor:
+                    i === stepIndex ? colors.primary : colors.divider,
+                  opacity: i === stepIndex ? 1 : 0.6,
+                }}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      </View>
 
       {/* Footer buttons */}
       <View style={{ paddingHorizontal: 20, paddingBottom: 18, gap: 12 }}>

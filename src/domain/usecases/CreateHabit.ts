@@ -1,4 +1,5 @@
-import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
+// src/domain/usecases/CreateHabit.ts
+import type { Habit, HabitSchedule, TimeOfDay } from "@/domain/entities/Habit";
 import type { HabitRepository } from "@/domain/repositories/HabitRepository";
 import type {
   HabitNotificationPlan,
@@ -43,7 +44,6 @@ function todayISO(): string {
 }
 
 function getDayOfWeekFromLocalDate(date: unknown): number {
-  // ultra-safe (nada de undefined.split)
   const s = safeString(date, todayISO());
   const [yy, mm, dd] = s.split("-").map(Number);
   const y = Number.isFinite(yy) ? yy : 2000;
@@ -139,14 +139,14 @@ export class CreateHabit {
         calendarEventId: null,
         endCondition: { type: "none" },
 
-        // 👇 nuevo
         notificationIds: [],
-      } as any;
+        isPaused: false,
+        pausedAt: null,
+        pauseReason: null,
+      };
 
-      // 1) guardar primero (opcional, pero práctico)
       await this.habitRepository.create(habit);
 
-      // 2) programar notificaciones
       const plan: HabitNotificationPlan = {
         habitId,
         name,
@@ -156,11 +156,12 @@ export class CreateHabit {
         reminderOffsetMinutes: habit.reminderOffsetMinutes ?? null,
       };
 
-      const ids = this.notificationScheduler
-        ? await this.notificationScheduler.scheduleForHabit(plan)
-        : [];
+      // ✅ NO dispara ahora al crear (solo agenda)
+      const ids = await this.notificationScheduler.scheduleForHabit(plan, {
+        horizonDays: 30,
+      });
 
-      // 3) persistir ids
+
       habit.notificationIds = ids;
       await this.habitRepository.updateNotifications(habitId, ids);
 
