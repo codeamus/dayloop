@@ -1,6 +1,7 @@
 // app/(tabs)/habits/[id].tsx
 import { container } from "@/core/di/container";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
+import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
 import MonthlyCalendar from "@/presentation/components/MonthlyCalendar";
 import { Screen } from "@/presentation/components/Screen";
 import { useToast } from "@/presentation/components/ToastProvider";
@@ -112,6 +113,8 @@ export default function EditHabitScreen() {
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
+
+  const [isEmojiSheetOpen, setIsEmojiSheetOpen] = useState(false);
 
   const { toggle: toggleForDate } = useToggleHabitForDate(habitId);
   const { show } = useToast();
@@ -522,6 +525,19 @@ export default function EditHabitScreen() {
               </Pressable>
             );
           })}
+          <Pressable
+            onPress={() => setIsEmojiSheetOpen(true)}
+            style={[styles.iconChip, styles.iconChipMore]}
+            hitSlop={8}
+          >
+            <Text style={styles.iconChipMoreText}>Más…</Text>
+          </Pressable>
+          <EmojiPickerSheet
+            visible={isEmojiSheetOpen}
+            value={icon}
+            onClose={() => setIsEmojiSheetOpen(false)}
+            onSelect={(e) => setIcon(e)}
+          />
         </View>
 
         {/* Frecuencia */}
@@ -975,5 +991,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  iconChipMore: {
+    backgroundColor: "rgba(241,233,215,0.08)",
+    borderColor: "rgba(241,233,215,0.16)",
+  },
+  iconChipMoreText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "900",
   },
 });
