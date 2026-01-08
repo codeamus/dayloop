@@ -1,46 +1,36 @@
-name: Preview - Build & Submit (TestFlight + Play Internal)
+name: Preview - Build and submit to TestFlight + Google Play (Internal)
 
 on:
   push:
     branches: ["preview"]
 
 jobs:
-  ios_preview:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm i -g eas-cli
+  # build_android_preview:
+  #   name: Build Android (preview - store)
+  #   type: build
+  #   params:
+  #     platform: android
+  #     profile: preview
 
-      - name: Build iOS (preview)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build -p ios --profile preview --non-interactive
+  # submit_android_preview:
+  #   name: Submit Android (internal track)
+  #   type: submit
+  #   needs: [build_android_preview]
+  #   params:
+  #     platform: android
+  #     profile: preview
 
-      - name: Submit iOS (TestFlight)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit -p ios --profile preview --latest --non-interactive
+  build_ios_preview:
+    name: Build iOS (preview - store)
+    type: build
+    params:
+      platform: ios
+      profile: preview
 
-  android_preview:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm i -g eas-cli
-
-      - name: Build Android (preview)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build -p android --profile preview --non-interactive
-
-      - name: Submit Android (Play Internal)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit -p android --profile preview --latest --non-interactive
+  submit_ios_preview:
+    name: Submit iOS (TestFlight)
+    type: submit
+    needs: [build_ios_preview]
+    params:
+      platform: ios
+      profile: preview
