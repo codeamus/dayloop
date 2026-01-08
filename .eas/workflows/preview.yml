@@ -5,28 +5,31 @@ on:
     branches: ["preview"]
 
 jobs:
+  # build_android_preview:
+  #   name: Build Android (preview - store)
+  #   type: build
+  #   params:
+  #     platform: android
+  #     profile: preview
+
+  # submit_android_preview:
+  #   name: Submit Android (internal track)
+  #   type: submit
+  #   needs: [build_android_preview]
+  #   params:
+  #     platform: android
+  #     profile: preview
+
   build_ios_preview:
     name: Build iOS (preview - TestFlight)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install deps
-        run: npm ci
-
-      - name: Setup EAS
-        run: npm i -g eas-cli
-
-      - name: EAS Build iOS (store)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build -p ios --profile preview --non-interactive
-
-      - name: EAS Submit iOS (TestFlight)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas submit -p ios --profile preview --latest --non-interactive
+  submit_ios_preview:
+    name: Submit iOS (TestFlight)
+    type: submit
+    needs: [build_ios_preview]
+    params:
+      platform: ios
+      profile: preview
