@@ -41,7 +41,6 @@ const WEEK_DAYS = [
 ];
 
 const COLOR_PRESETS = ["#e6bc01", "#8ecd6e", "#f1e9d7", "#2b3e4a", "#ef4444"];
-const ICON_PRESETS = ["📚", "🏃‍♂️", "💧", "🧘‍♂️", "🧠", "✅"];
 
 type PickerTarget = "start" | "end";
 type ScheduleType = HabitSchedule["type"]; // daily | weekly | monthly
@@ -101,7 +100,7 @@ export default function EditHabitScreen() {
   const [selectedMonthDays, setSelectedMonthDays] = useState<number[]>([]);
 
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
-  const [icon, setIcon] = useState<string>(ICON_PRESETS[0]);
+  const [icon, setIcon] = useState<string>("📚");
 
   // bloque horario
   const [startTime, setStartTime] = useState<string>("08:00");
@@ -129,7 +128,7 @@ export default function EditHabitScreen() {
 
     setName(habit.name);
     setColor(habit.color || COLOR_PRESETS[0]);
-    setIcon(habit.icon || ICON_PRESETS[0]);
+    setIcon(habit.icon || "📚");
 
     // schedule init
     if (habit.schedule.type === "daily") {
@@ -289,10 +288,7 @@ export default function EditHabitScreen() {
     };
 
     await container.updateHabit.execute(updated);
-
-    // ✅ refrescamos el calendario mensual después de guardar (validación real)
     await refreshMonthly();
-
     router.back();
   }
 
@@ -384,7 +380,6 @@ export default function EditHabitScreen() {
               </Text>
             </View>
 
-            {/* ✅ Ajuste: solo mostrar semanal si el hábito es weekly */}
             {isWeeklyHabit && (
               <>
                 <View style={styles.streakRow}>
@@ -512,33 +507,26 @@ export default function EditHabitScreen() {
 
         {/* Ícono */}
         <Text style={styles.label}>Ícono</Text>
-        <View style={styles.iconsRow}>
-          {ICON_PRESETS.map((i) => {
-            const active = i === icon;
-            return (
-              <Pressable
-                key={i}
-                onPress={() => setIcon(i)}
-                style={[styles.iconChip, active && styles.iconChipActive]}
-              >
-                <Text style={styles.iconChipText}>{i}</Text>
-              </Pressable>
-            );
-          })}
+        <View style={styles.iconPickerRow}>
+          <View style={styles.iconPreview}>
+            <Text style={styles.iconPreviewText}>{icon || "🙂"}</Text>
+          </View>
+
           <Pressable
             onPress={() => setIsEmojiSheetOpen(true)}
-            style={[styles.iconChip, styles.iconChipMore]}
-            hitSlop={8}
+            style={styles.iconPickerButton}
+            hitSlop={10}
           >
-            <Text style={styles.iconChipMoreText}>Más…</Text>
+            <Text style={styles.iconPickerButtonText}>Elegir ícono</Text>
           </Pressable>
-          <EmojiPickerSheet
-            visible={isEmojiSheetOpen}
-            value={icon}
-            onClose={() => setIsEmojiSheetOpen(false)}
-            onSelect={(e) => setIcon(e)}
-          />
         </View>
+
+        <EmojiPickerSheet
+          visible={isEmojiSheetOpen}
+          value={icon}
+          onClose={() => setIsEmojiSheetOpen(false)}
+          onSelect={(e) => setIcon(e)}
+        />
 
         {/* Frecuencia */}
         <Text style={styles.label}>Frecuencia</Text>
@@ -650,7 +638,6 @@ export default function EditHabitScreen() {
 
         {/* Horario */}
         <Text style={styles.label}>Horario</Text>
-
         <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
           <Pressable
             style={styles.timeButton}
@@ -775,7 +762,6 @@ const styles = StyleSheet.create({
   streakLabel: { color: colors.mutedText, fontSize: 12, fontWeight: "800" },
   streakValue: { color: colors.text, fontSize: 12, fontWeight: "900" },
 
-  // ✅ Monthly module styles
   monthlyCard: {
     marginTop: 12,
     padding: 16,
@@ -911,20 +897,31 @@ const styles = StyleSheet.create({
   colorDotWrapperActive: { borderColor: colors.primary },
   colorDot: { width: 22, height: 22, borderRadius: 999 },
 
-  iconsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  iconChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
+  iconPickerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+
+  iconPreview: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(43,62,74,0.35)",
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: "rgba(43,62,74,0.20)",
   },
-  iconChipActive: {
-    backgroundColor: "rgba(230,188,1,0.16)",
-    borderColor: "rgba(230,188,1,0.45)",
+  iconPreviewText: { fontSize: 26 },
+
+  iconPickerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(241,233,215,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  iconChipText: { fontSize: 16 },
+  iconPickerButtonText: { color: colors.text, fontSize: 13, fontWeight: "900" },
 
   timeButton: {
     borderRadius: 14,
@@ -982,23 +979,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 15,
   },
-  streakPillRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  monthlyPillRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  iconChipMore: {
-    backgroundColor: "rgba(241,233,215,0.08)",
-    borderColor: "rgba(241,233,215,0.16)",
-  },
-  iconChipMoreText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: "900",
-  },
+
+  streakPillRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  monthlyPillRow: { flexDirection: "row", alignItems: "center", gap: 6 },
 });
