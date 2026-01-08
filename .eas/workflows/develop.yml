@@ -1,35 +1,20 @@
-name: Develop - Build (development)
+name: Develop - Create development builds
 
 on:
   push:
-    branches:
-      - develop
+    branches: ["develop"]
 
 jobs:
-  build_dev:
-    runs-on: ubuntu-latest
+  android_development_build:
+    name: Build Android (development)
+    type: build
+    params:
+      platform: android
+      profile: development
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-
-      - name: Build Android (development)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build -p android --profile development --non-interactive
-
-      - name: Build iOS (development)
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas build -p ios --profile development --non-interactive
+  ios_device_development_build:
+    name: Build iOS device (development)
+    type: build
+    params:
+      platform: ios
+      profile: development
