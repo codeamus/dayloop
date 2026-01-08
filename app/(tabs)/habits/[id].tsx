@@ -11,6 +11,7 @@ import { useToggleHabitForDate } from "@/presentation/hooks/useToggleHabitForDat
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
+import { Feather } from "@expo/vector-icons";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -357,9 +358,12 @@ export default function EditHabitScreen() {
             <View style={styles.streakHeader}>
               <Text style={styles.streakTitle}>Rachas</Text>
               <View style={styles.streakPill}>
-                <Text style={styles.streakPillText}>
-                  {streak.currentDailyStreak} 🔥
-                </Text>
+                <View style={styles.streakPillRow}>
+                  <Feather name="zap" size={14} color={colors.primary} />
+                  <Text style={styles.streakPillText}>
+                    {streak.currentDailyStreak}
+                  </Text>
+                </View>
               </View>
             </View>
 
@@ -411,27 +415,43 @@ export default function EditHabitScreen() {
             <>
               <View style={styles.monthlyStatsRow}>
                 <View style={styles.monthlyPill}>
-                  <Text style={styles.monthlyPillText}>
-                    🔥 {monthlyStats.currentMonthlyStreak}
-                  </Text>
+                  <View style={styles.monthlyPillRow}>
+                    <Feather name="zap" size={14} color={colors.text} />
+                    <Text style={styles.monthlyPillText}>
+                      {monthlyStats.currentMonthlyStreak}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.monthlyPill}>
-                  <Text style={styles.monthlyPillText}>
-                    🏆 {monthlyStats.bestMonthlyStreak}
-                  </Text>
+                  <View style={styles.monthlyPillRow}>
+                    <Feather name="award" size={14} color={colors.text} />
+                    <Text style={styles.monthlyPillText}>
+                      {monthlyStats.bestMonthlyStreak}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.monthlyPill}>
-                  <Text style={styles.monthlyPillText}>
-                    ✅ {monthlyStats.doneDays}/{monthlyStats.scheduledDays}
-                  </Text>
+                  <View style={styles.monthlyPillRow}>
+                    <Feather
+                      name="check-circle"
+                      size={14}
+                      color={colors.text}
+                    />
+                    <Text style={styles.monthlyPillText}>
+                      {monthlyStats.doneDays}/{monthlyStats.scheduledDays}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.monthlyPill}>
-                  <Text style={styles.monthlyPillText}>
-                    📊 {Math.round(monthlyStats.completionRate * 100)}%
-                  </Text>
+                  <View style={styles.monthlyPillRow}>
+                    <Feather name="bar-chart-2" size={14} color={colors.text} />
+                    <Text style={styles.monthlyPillText}>
+                      {Math.round(monthlyStats.completionRate * 100)}%
+                    </Text>
+                  </View>
                 </View>
               </View>
 
@@ -945,5 +965,15 @@ const styles = StyleSheet.create({
     color: colors.primaryText,
     fontWeight: "900",
     fontSize: 15,
+  },
+  streakPillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  monthlyPillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
 });
