@@ -1,26 +1,40 @@
 // app/settings/index.tsx
 import { Screen } from "@/presentation/components/Screen";
 import { colors } from "@/theme/colors";
+import * as Application from "expo-application";
 import * as Notifications from "expo-notifications";
 import { Link, router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
 
 type PermissionState = "loading" | "granted" | "denied" | "undetermined";
 
+let StoreReview: typeof import("expo-store-review") | null = null;
+try {
+   
+  StoreReview = require("expo-store-review");
+} catch {
+  StoreReview = null;
+}
+
 export default function SettingsScreen() {
   const [permState, setPermState] = useState<PermissionState>("loading");
   const [busy, setBusy] = useState(false);
 
-  // ✅ Android: channel
+  // =========================
+  // Notificaciones
+  // =========================
   async function ensureAndroidChannel() {
     if (Platform.OS !== "android") return;
     await Notifications.setNotificationChannelAsync("default", {
@@ -55,15 +69,29 @@ export default function SettingsScreen() {
   const subtitle = useMemo(() => {
     switch (permState) {
       case "granted":
-        return "Las notificaciones están activadas. Te ayudaremos con recordatorios.";
+        return "Activadas. Te ayudaremos con recordatorios.";
       case "denied":
-        return "Están desactivadas. Puedes activarlas desde Ajustes del teléfono.";
+        return "Desactivadas. Debes activarlas desde Ajustes del teléfono.";
       case "undetermined":
         return "Actívalas para recibir recordatorios de tus hábitos.";
       default:
         return "Cargando…";
     }
   }, [permState]);
+
+  const isGranted = permState === "granted";
+  const showEnableButton = permState === "undetermined";
+  const showSystemHint = permState === "denied";
+
+  async function openSystemNotificationSettings() {
+    // iOS: Linking.openSettings abre la app en Ajustes
+    // Android: también abre Ajustes de la app
+    try {
+      await Linking.openSettings();
+    } catch {
+      Alert.alert("No disponible", "No se pudo abrir Ajustes del sistema.");
+    }
+  }
 
   async function onPressEnable() {
     try {
@@ -90,7 +118,6 @@ export default function SettingsScreen() {
     }
   }
 
-  // ✅ TEST 5s: agenda una notificación de prueba
   async function testNotificationIn5s() {
     try {
       setBusy(true);
@@ -124,7 +151,6 @@ export default function SettingsScreen() {
     }
   }
 
-  // ✅ LISTAR: muestra un preview de las primeras 8
   async function listScheduledNotifications() {
     try {
       setBusy(true);
@@ -159,7 +185,6 @@ export default function SettingsScreen() {
     }
   }
 
-  // ✅ BORRAR TODAS: clave para limpiar duplicados viejos
   async function cancelAllScheduledNotifications() {
     try {
       setBusy(true);
@@ -173,6 +198,96 @@ export default function SettingsScreen() {
     }
   }
 
+  // =========================
+  // Privacidad / Reset
+  // =========================
+  async function onPressResetApp() {
+    Alert.alert(
+      "Resetear app",
+      "Esto borrará datos locales (hábitos, logs, ajustes) y notificaciones programadas.\n\n¿Continuar?",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Resetear",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setBusy(true);
+
+              // 1) Notificaciones
+              await Notifications.cancelAllScheduledNotificationsAsync();
+
+              // 2) Datos locales
+              // ⚠️ Aquí depende de tu infraestructura:
+              // - Si usas AsyncStorage: AsyncStorage.clear()
+              // - Si usas SQLite: borrar DB / reinicializar
+              //
+              // Como no tengo tus módulos aquí, dejo el hook claro:
+              // TODO: Implementar reset real (AsyncStorage + SQLite)
+              //
+              // Importante: NO invento paths ni funciones que no existen.
+
+              Alert.alert(
+                "Listo",
+                "Se limpiaron notificaciones. Ahora implementemos el borrado de DB/Storage en el siguiente paso."
+              );
+            } catch (e) {
+              console.error("[Settings] resetApp error", e);
+              Alert.alert("Error", "No se pudo resetear la app.");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // =========================
+  // Soporte
+  // =========================
+async function onPressRateApp() {
+  try {
+    if (!StoreReview) {
+      Alert.alert(
+        "No disponible",
+        "Rate app requiere un build nativo con expo-store-review instalado."
+      );
+      return;
+    }
+
+    const available = await StoreReview.isAvailableAsync();
+    if (!available) {
+      Alert.alert(
+        "No disponible",
+        "El sistema no permite mostrar el prompt de rating en este dispositivo."
+      );
+      return;
+    }
+
+    await StoreReview.requestReview();
+  } catch (e) {
+    console.error("[Settings] rateApp error", e);
+    Alert.alert("Error", "No se pudo abrir el rating.");
+  }
+}
+
+
+  // =========================
+  // Info
+  // =========================
+  const versionLabel = useMemo(() => {
+    const v =
+      Application.nativeApplicationVersion ??
+      Application.applicationVersion ??
+      "—";
+    const build =
+      Application.nativeBuildVersion ??
+      Application.applicationBuildVersion ??
+      "—";
+    return `v${v} (${build})`;
+  }, []);
+
   if (permState === "loading") {
     return (
       <Screen>
@@ -183,10 +298,6 @@ export default function SettingsScreen() {
       </Screen>
     );
   }
-
-  const isGranted = permState === "granted";
-  const showEnableButton = permState === "undetermined";
-  const showSystemHint = permState === "denied";
 
   return (
     <Screen>
@@ -205,110 +316,214 @@ export default function SettingsScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Notificaciones */}
-      <View style={styles.card}>
-        <View style={styles.rowTop}>
-          <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text style={styles.cardTitle}>Notificaciones</Text>
-            <Text style={styles.cardSubtitle}>{subtitle}</Text>
-          </View>
-
-          <View
-            style={[
-              styles.statusPill,
-              isGranted ? styles.statusPillOn : styles.statusPillOff,
-            ]}
-          >
-            <Text
+      <ScrollView>
+        {/* =========================
+          NOTIFICACIONES
+         ========================= */}
+        <View style={styles.card}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Notificaciones</Text>
+            <View
               style={[
-                styles.statusText,
-                isGranted ? styles.statusTextOn : styles.statusTextOff,
+                styles.statusPill,
+                isGranted ? styles.statusPillOn : styles.statusPillOff,
               ]}
             >
-              {isGranted ? "Activadas" : "Desactivadas"}
-            </Text>
-          </View>
-        </View>
-
-        {showEnableButton && (
-          <>
-            <View style={styles.divider} />
-            <Pressable
-              style={[styles.primaryButton, busy && { opacity: 0.6 }]}
-              onPress={onPressEnable}
-              disabled={busy}
-            >
-              <Text style={styles.primaryButtonText}>
-                {busy ? "Solicitando…" : "Activar notificaciones"}
-              </Text>
-            </Pressable>
-          </>
-        )}
-
-        <View style={styles.divider} />
-
-        <Pressable
-          style={[styles.primaryButton, busy && { opacity: 0.6 }]}
-          onPress={testNotificationIn5s}
-          disabled={busy}
-        >
-          <Text style={styles.primaryButtonText}>
-            {busy ? "Probando…" : "Test notificación (5s)"}
-          </Text>
-        </Pressable>
-
-        <View style={{ height: 10 }} />
-
-        <Pressable
-          style={[styles.cancelButton, busy && { opacity: 0.6 }]}
-          onPress={listScheduledNotifications}
-          disabled={busy}
-        >
-          <Text style={styles.cancelText}>Ver notificaciones programadas</Text>
-        </Pressable>
-
-        <View style={{ height: 10 }} />
-
-        <Pressable
-          style={[styles.dangerButton, busy && { opacity: 0.6 }]}
-          onPress={cancelAllScheduledNotifications}
-          disabled={busy}
-        >
-          <Text style={styles.dangerText}>Borrar TODAS las programadas</Text>
-        </Pressable>
-
-        {showSystemHint && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>
-                Ya las rechazaste antes. Para activarlas:
-              </Text>
-
-              <Text style={styles.steps}>
-                1) Ajustes del teléfono{"\n"}
-                2) Notificaciones{"\n"}
-                3) Dayloop{"\n"}
-                4) Permitir notificaciones
-              </Text>
-
-              <Text style={styles.infoTextMuted}>
-                (iOS/Android no permiten volver a mostrar el prompt cuando
-                eliges “No permitir”.)
+              <Text
+                style={[
+                  styles.statusText,
+                  isGranted ? styles.statusTextOn : styles.statusTextOff,
+                ]}
+              >
+                {isGranted ? "Activadas" : "Desactivadas"}
               </Text>
             </View>
-          </>
-        )}
+          </View>
 
-        {/* Opcional: link a privacy policy (recomendado para stores) */}
-        <View style={styles.divider} />
-        <Link href="https://codeamus.dev/dayloop/privacy" asChild>
-          <Pressable style={styles.linkRow}>
-            <Text style={styles.linkText}>Privacy Policy</Text>
-            <Text style={styles.linkArrow}>›</Text>
+          <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+
+          <View style={{ height: 12 }} />
+
+          {/* Switch “habilitar/deshabilitar” (realista: atajo a Ajustes) */}
+          <Pressable
+            style={styles.row}
+            onPress={openSystemNotificationSettings}
+            disabled={busy}
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.rowTitle}>Habilitar / deshabilitar</Text>
+              <Text style={styles.rowSubtitle}>
+                Se cambia desde Ajustes del sistema.
+              </Text>
+            </View>
+            <Switch
+              value={isGranted}
+              onValueChange={() => openSystemNotificationSettings()}
+              thumbColor={Platform.OS === "android" ? colors.text : undefined}
+              trackColor={{
+                false: "rgba(255,255,255,0.18)",
+                true: colors.primary,
+              }}
+              disabled={busy}
+            />
           </Pressable>
-        </Link>
-      </View>
+
+          {showEnableButton && (
+            <>
+              <View style={styles.divider} />
+              <Pressable
+                style={[styles.primaryButton, busy && { opacity: 0.6 }]}
+                onPress={onPressEnable}
+                disabled={busy}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {busy ? "Solicitando…" : "Activar notificaciones"}
+                </Text>
+              </Pressable>
+            </>
+          )}
+
+          {showSystemHint && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  Ya las rechazaste antes. Para activarlas:
+                </Text>
+
+                <Text style={styles.steps}>
+                  1) Ajustes del teléfono{"\n"}
+                  2) Notificaciones{"\n"}
+                  3) Dayloop{"\n"}
+                  4) Permitir notificaciones
+                </Text>
+
+                <Text style={styles.infoTextMuted}>
+                  (iOS/Android no permiten volver a mostrar el prompt si eliges
+                  “No permitir”.)
+                </Text>
+
+                <View style={{ height: 10 }} />
+
+                <Pressable
+                  style={[styles.cancelButton, busy && { opacity: 0.6 }]}
+                  onPress={openSystemNotificationSettings}
+                  disabled={busy}
+                >
+                  <Text style={styles.cancelText}>Abrir Ajustes</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={[styles.dangerButton, busy && { opacity: 0.6 }]}
+            onPress={cancelAllScheduledNotifications}
+            disabled={busy}
+          >
+            <Text style={styles.dangerText}>Borrar notificaciones programadas</Text>
+          </Pressable>
+        </View>
+
+        {/* =========================
+          CALENDARIO (entry)
+         ========================= */}
+        {/* <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Calendario</Text>
+          <Text style={styles.sectionSubtitle}>
+            Sincroniza hábitos para verlos en Apple/Google Calendar.
+          </Text>
+
+          <View style={styles.divider} />
+
+          <Link href="/settings/calendar-sync" asChild>
+            <Pressable style={styles.linkRow}>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <Text style={styles.rowTitle}>Sincronizar hábitos</Text>
+                <Text style={styles.rowSubtitle}>
+                  Configura permisos y cómo se reflejan los hábitos.
+                </Text>
+              </View>
+              <Text style={styles.linkArrow}>›</Text>
+            </Pressable>
+          </Link>
+        </View> */}
+
+        {/* =========================
+          PRIVACIDAD
+         ========================= */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Privacidad</Text>
+          <Text style={styles.sectionSubtitle}>
+            Control total sobre tus datos locales.
+          </Text>
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={[styles.dangerButton, busy && { opacity: 0.6 }]}
+            onPress={onPressResetApp}
+            disabled={busy}
+          >
+            <Text style={styles.dangerText}>Borrar datos / Reset app</Text>
+          </Pressable>
+        </View>
+
+        {/* =========================
+          SOPORTE
+         ========================= */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Soporte</Text>
+          <Text style={styles.sectionSubtitle}>
+            Envíanos feedback o deja una reseña.
+          </Text>
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={[styles.cancelButton, busy && { opacity: 0.6 }]}
+            onPress={onPressRateApp}
+            disabled={busy}
+          >
+            <Text style={styles.cancelText}>Rate app</Text>
+          </Pressable>
+        </View>
+
+        {/* =========================
+          INFO
+         ========================= */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Info</Text>
+          <Text style={styles.sectionSubtitle}>Versión y documentos.</Text>
+
+          <View style={styles.divider} />
+
+          <View style={styles.rowStatic}>
+            <Text style={styles.rowTitle}>Versión</Text>
+            <Text style={styles.rowValue}>{versionLabel}</Text>
+          </View>
+
+          <View style={styles.divider} />
+
+          <Link href="https://codeamus.dev/dayloop/terms" asChild>
+            <Pressable style={styles.linkRow}>
+              <Text style={styles.linkText}>Términos</Text>
+              <Text style={styles.linkArrow}>›</Text>
+            </Pressable>
+          </Link>
+
+          <View style={{ height: 10 }} />
+
+          <Link href="https://codeamus.dev/dayloop/privacy" asChild>
+            <Pressable style={styles.linkRow}>
+              <Text style={styles.linkText}>Privacidad</Text>
+              <Text style={styles.linkArrow}>›</Text>
+            </Pressable>
+          </Link>
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
@@ -352,25 +567,26 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    marginTop: 8,
+    marginTop: 10,
     padding: 16,
     borderRadius: 18,
     backgroundColor: "rgba(50,73,86,0.55)",
     borderWidth: 1,
     borderColor: colors.border,
   },
-  rowTop: {
+
+  sectionHeader: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
     gap: 12,
   },
-  cardTitle: {
+  sectionTitle: {
     color: colors.text,
     fontSize: 16,
     fontWeight: "900",
   },
-  cardSubtitle: {
+  sectionSubtitle: {
     color: colors.mutedText,
     fontSize: 12,
     marginTop: 4,
@@ -401,6 +617,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginVertical: 14,
     opacity: 0.9,
+  },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  rowStatic: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  rowTitle: { color: colors.text, fontSize: 13, fontWeight: "900" },
+  rowSubtitle: {
+    marginTop: 4,
+    color: colors.mutedText,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  rowValue: {
+    color: "rgba(241,233,215,0.85)",
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   primaryButton: {
