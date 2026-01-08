@@ -5,26 +5,12 @@ on:
     branches: ["preview"]
 
 jobs:
-  # build_android_preview:
-  #   name: Build Android (preview - store)
-  #   type: build
-  #   params:
-  #     platform: android
-  #     profile: preview
-
-  # submit_android_preview:
-  #   name: Submit Android (internal track)
-  #   type: submit
-  #   needs: [build_android_preview]
-  #   params:
-  #     platform: android
-  #     profile: preview
-
   build_ios_preview:
     name: Build iOS (preview - TestFlight)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    type: build
+    params:
+      platform: ios
+      profile: preview
 
   submit_ios_preview:
     name: Submit iOS (TestFlight)
@@ -33,3 +19,18 @@ jobs:
     params:
       platform: ios
       profile: preview
+
+  # build_android_preview:
+  #   name: Build Android (preview - Internal)
+  #   type: build
+  #   params:
+  #     platform: android
+  #     profile: preview
+
+  # submit_android_preview:
+  #   name: Submit Android (Play Internal)
+  #   type: submit
+  #   needs: [build_android_preview]
+  #   params:
+  #     platform: android
+  #     profile: preview
