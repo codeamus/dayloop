@@ -5,6 +5,9 @@ on:
     branches: ["preview"]
 
 jobs:
+  # =========================
+  # iOS – TestFlight
+  # =========================
   build_ios_preview:
     name: Build iOS (preview - TestFlight)
     type: build
@@ -19,18 +22,23 @@ jobs:
     params:
       platform: ios
       profile: preview
+      build_id: ${{ needs.build_ios_preview.outputs.id }}
 
-  # build_android_preview:
-  #   name: Build Android (preview - Internal)
-  #   type: build
-  #   params:
-  #     platform: android
-  #     profile: preview
+  # =========================
+  # Android – Play Internal
+  # =========================
+  build_android_preview:
+    name: Build Android (preview - Internal)
+    type: build
+    params:
+      platform: android
+      profile: preview
 
-  # submit_android_preview:
-  #   name: Submit Android (Play Internal)
-  #   type: submit
-  #   needs: [build_android_preview]
-  #   params:
-  #     platform: android
-  #     profile: preview
+  submit_android_preview:
+    name: Submit Android (Play Internal)
+    type: submit
+    needs: [build_android_preview]
+    params:
+      platform: android
+      profile: preview
+      build_id: ${{ needs.build_android_preview.outputs.id }}
