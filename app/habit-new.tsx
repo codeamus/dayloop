@@ -15,7 +15,8 @@ import {
   View,
 } from "react-native";
 
-import { scheduleHabitReminder } from "@/core/notifications/notifications";
+// ❌ YA NO usamos scheduleHabitReminder (era repeats=true y no respeta weekly/monthly)
+// import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
 import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
 import { Screen } from "@/presentation/components/Screen";
@@ -23,14 +24,6 @@ import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
-
-const COLOR_OPTIONS = [
-  colors.primary,
-  colors.success,
-  "#5aa9e6",
-  "#f08a5d",
-  "#c06c84",
-];
 
 type HabitType = "daily" | "weekly" | "monthly";
 type PickerTarget = "start" | "end";
@@ -240,35 +233,25 @@ export default function HabitNewScreen() {
       startTime,
       endTime,
       weeklyDays: type === "weekly" ? weeklyDays : undefined,
-      monthlyDays: type === "monthly" ? monthlyDays : undefined,
+
+      // ⚠️ OJO: tu usecase espera "monthDays" (no monthlyDays)
+      monthDays: type === "monthly" ? monthlyDays : undefined,
+
       reminderOffsetMinutes, // null = sin recordatorio
+      date: undefined as any, // opcional, el usecase usa today si no viene
     };
 
     const result = await create(payload);
 
-    if (!result.ok) {
+    if (!result?.ok) {
       Alert.alert("No se pudo guardar", "Inténtalo nuevamente.");
       return;
     }
 
-    if (reminderOffsetMinutes !== null) {
-      const [hStr, mStr] = startTime.split(":");
-      const hour = Number(hStr);
-      const minute = Number(mStr);
-
-      const createdHabitId = (result as any).habit?.id ?? (result as any).id;
-
-      if (createdHabitId) {
-        await scheduleHabitReminder({
-          habitId: createdHabitId,
-          habitName: name.trim(),
-          hour,
-          minute,
-          offsetMinutes: reminderOffsetMinutes ?? 0,
-        });
-      }
-    }
-
+    // ✅ IMPORTANTE:
+    // Ya NO agendas aquí.
+    // - CreateHabit (domain) agenda + guarda notificationIds (respetando weekly/monthly)
+    // - useCreateHabit (hook) también hace reschedule/cancel robusto (blindaje)
     router.back();
   }, [
     name,
