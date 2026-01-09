@@ -49,7 +49,10 @@ class Container {
   );
 
   // ✅ Update simple
-  updateHabit = new UpdateHabit(this.habitRepository);
+  updateHabit = new UpdateHabit(
+    this.habitRepository,
+    this.notificationScheduler
+  );
 
   // ✅ Pause / resume
   setHabitPaused = new SetHabitPaused(

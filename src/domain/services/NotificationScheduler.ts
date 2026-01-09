@@ -19,4 +19,7 @@ export interface NotificationScheduler {
   ): Promise<string[]>;
 
   cancel(notificationIds: string[]): Promise<void>;
+
+  // ✅ clave: cancelar por habitId mirando el sistema
+  cancelByHabitId(habitId: string): Promise<void>;
 }

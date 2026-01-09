@@ -67,7 +67,6 @@ function isValidDate(x: Date) {
 function nextOccurrences(plan: HabitNotificationPlan, horizonDays: number) {
   const now = new Date();
   const minFuture = new Date(now.getTime() + 60 * 1000); // >= 60s al futuro
-
   const { hour, minute } = computeReminderHM(plan);
 
   const out: Date[] = [];
@@ -146,6 +145,34 @@ export class ExpoNotificationScheduler implements NotificationScheduler {
     );
   }
 
+  // ✅ cancel robusto: mira el sistema y cancela TODOS los que correspondan al hábito
+  async cancelByHabitId(habitId: string): Promise<void> {
+    if (!habitId) return;
+
+    try {
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+
+      const toCancel = scheduled
+        .filter((n) => (n?.content?.data as any)?.habitId === habitId)
+        .map((n) => n.identifier)
+        .filter((id) => typeof id === "string" && id.length > 0);
+
+      if (!toCancel.length) return;
+
+      await Promise.all(
+        toCancel.map(async (id) => {
+          try {
+            await Notifications.cancelScheduledNotificationAsync(id);
+          } catch {
+            // ignore
+          }
+        })
+      );
+    } catch (e) {
+      console.warn("[ExpoNotificationScheduler] cancelByHabitId failed", e);
+    }
+  }
+
   async scheduleForHabit(
     plan: HabitNotificationPlan,
     options?: { horizonDays?: number }
@@ -166,7 +193,6 @@ export class ExpoNotificationScheduler implements NotificationScheduler {
           body: buildBody(plan),
           data: { habitId: plan.habitId, kind: "habit_reminder" },
         },
-        // ✅ nuevo formato (sin warning)
         trigger: { type: "date", date },
       });
 

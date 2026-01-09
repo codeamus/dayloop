@@ -1,8 +1,8 @@
 // app/(tabs)/habits/[id].tsx
 import { container } from "@/core/di/container";
 import {
-  cancelHabitReminder,
-  scheduleHabitReminder,
+  cancelHabitNotificationsByHabitId,
+  rescheduleHabitNotificationsForHabit,
 } from "@/core/notifications/notifications";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
@@ -317,23 +317,14 @@ export default function EditHabitScreen() {
       reminderOffsetMinutes,
     };
 
+    // 1) Persistir cambios del hábito
     await container.updateHabit.execute(updated);
 
-    // ✅ Reprogramar notificación (o cancelarla)
+    // 2) ✅ Reprogramar notificaciones usando el scheduler (respeta weekly/monthly y evita duplicados)
     if (reminderOffsetMinutes === null) {
-      await cancelHabitReminder(habit.id);
+      await cancelHabitNotificationsByHabitId(updated.id);
     } else {
-      const [hStr, mStr] = startTime.split(":");
-      const hour = Number(hStr);
-      const minute = Number(mStr);
-
-      await scheduleHabitReminder({
-        habitId: habit.id,
-        habitName: trimmed,
-        hour,
-        minute,
-        offsetMinutes: reminderOffsetMinutes ?? 0,
-      });
+      await rescheduleHabitNotificationsForHabit(updated, { horizonDays: 30 });
     }
 
     await refreshMonthly();
@@ -352,8 +343,9 @@ export default function EditHabitScreen() {
           text: "Eliminar",
           style: "destructive",
           onPress: async () => {
-            // ✅ cancelar recordatorio colgado
-            await cancelHabitReminder(habit.id);
+            // ✅ Cancela TODAS las notificaciones del hábito (las guardadas en SQLite)
+            await cancelHabitNotificationsByHabitId(habit.id);
+
             await container.deleteHabit.execute(habit.id);
             router.back();
           },

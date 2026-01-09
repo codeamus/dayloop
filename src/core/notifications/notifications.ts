@@ -1,18 +1,17 @@
 // src/core/notifications/notifications.ts
-import { HabitId } from "@/domain/entities/Habit";
+import type { Habit } from "@/domain/entities/Habit";
+import type { HabitNotificationPlan } from "@/domain/services/NotificationScheduler";
 import Constants from "expo-constants";
 import type * as NotificationsType from "expo-notifications";
 import { Platform } from "react-native";
 
-// ✅ AsyncStorage para persistir el notificationId por hábito
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { container } from "@/core/di/container";
 
-// Expo Go Android/iOS: limitaciones (y en general Expo Go)
+// Expo Go Android/iOS: limitaciones
 const isExpoGo =
   (Platform.OS === "android" || Platform.OS === "ios") &&
   Constants.appOwnership === "expo";
 
-// Instancia real (solo fuera de Expo Go)
 let Notifications: typeof NotificationsType | null = null;
 
 if (!isExpoGo) {
@@ -22,12 +21,6 @@ if (!isExpoGo) {
 function getNotifsOrNull() {
   return Notifications;
 }
-
-// IDs estables
-const DAILY_ID = "daily-summary";
-
-// Storage keys (por hábito)
-const habitKey = (habitId: HabitId) => `dayloop:notif:habit:${habitId}`;
 
 // ==========================
 // Config global (idempotente)
@@ -46,17 +39,13 @@ export function initNotificationsConfig() {
   try {
     Notifs.setNotificationHandler({
       handleNotification: async () => ({
-        // foreground only
         shouldPlaySound: false,
         shouldSetBadge: false,
-
-        // SDK reciente
         shouldShowBanner: true,
         shouldShowList: true,
       }),
     });
   } catch (e) {
-    // en caso de compatibilidad de versión, no queremos romper la app
     console.warn("[notifications] setNotificationHandler failed:", e);
   }
 }
@@ -74,7 +63,6 @@ export async function requestNotificationPermission(): Promise<boolean> {
     const perms = await Notifs.getPermissionsAsync();
     if (perms.status === "granted") return true;
 
-    // Solo pedimos si no está granted
     const req = await Notifs.requestPermissionsAsync();
     return req.status === "granted";
   } catch (e) {
@@ -84,163 +72,66 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 // ==========================
-// Cancelación (por ID)
+// ✅ Hábito: cancel robusto por habitId
 // ==========================
-export async function cancelScheduledNotification(id: string) {
+export async function cancelHabitNotificationsByHabitId(habitId: string) {
   if (isExpoGo) return;
-
-  const Notifs = getNotifsOrNull();
-  if (!Notifs) return;
-
-  try {
-    await Notifs.cancelScheduledNotificationAsync(id);
-  } catch {
-    // si no existía, da lo mismo
-  }
-}
-
-export async function cancelDailyReminder() {
-  await cancelScheduledNotification(DAILY_ID);
-}
-
-// ==========================
-// Recordatorio diario (resumen)
-// ==========================
-export async function scheduleDailyReminder(hour: number, minute: number) {
-  if (isExpoGo) return;
-
-  const Notifs = getNotifsOrNull();
-  if (!Notifs) return;
 
   const ok = await requestNotificationPermission();
   if (!ok) return;
 
-  await cancelScheduledNotification(DAILY_ID);
+  // ✅ cancela lo que exista (aunque no tengamos IDs guardadas)
+  await container.notificationScheduler.cancelByHabitId(habitId);
 
-  const trigger: NotificationsType.NotificationTriggerInput = {
-    type: Notifs.SchedulableTriggerInputTypes.CALENDAR,
-    hour,
-    minute,
-    repeats: true,
-  };
-
-  await Notifs.scheduleNotificationAsync({
-    identifier: DAILY_ID,
-    content: {
-      title: "DAYLOOP",
-      body: "No olvides completar tus hábitos de hoy 💡",
-      sound: Platform.OS === "ios" ? "default" : undefined,
-    },
-    trigger,
-  });
-}
-
-// ==========================
-// ✅ Recordatorios por hábito (upsert/cancel)
-// ==========================
-async function getHabitNotificationId(
-  habitId: HabitId
-): Promise<string | null> {
-  try {
-    const v = await AsyncStorage.getItem(habitKey(habitId));
-    return v || null;
-  } catch {
-    return null;
+  // ✅ además si tenemos IDs guardadas en DB, cancélalas igual (doble seguro)
+  const habit = await container.habitRepository.getById(habitId);
+  if (habit?.notificationIds?.length) {
+    await container.notificationScheduler.cancel(habit.notificationIds);
+    await container.habitRepository.updateNotifications(habitId, []);
   }
 }
 
-async function setHabitNotificationId(
-  habitId: HabitId,
-  notificationId: string | null
+// ==========================
+// ✅ Hábito: re-agendar respetando schedule weekly/monthly
+// ==========================
+export async function rescheduleHabitNotificationsForHabit(
+  habit: Habit,
+  options?: { horizonDays?: number }
 ) {
-  try {
-    if (!notificationId) {
-      await AsyncStorage.removeItem(habitKey(habitId));
-      return;
-    }
-    await AsyncStorage.setItem(habitKey(habitId), notificationId);
-  } catch {
-    // noop
-  }
-}
-
-/**
- * Cancela el recordatorio actual de un hábito (si existe)
- */
-export async function cancelHabitReminder(habitId: HabitId) {
   if (isExpoGo) return;
-
-  const Notifs = getNotifsOrNull();
-  if (!Notifs) return;
-
-  const existing = await getHabitNotificationId(habitId);
-  if (!existing) return;
-
-  try {
-    await Notifs.cancelScheduledNotificationAsync(existing);
-  } catch {
-    // si no existía, da lo mismo
-  } finally {
-    await setHabitNotificationId(habitId, null);
-  }
-}
-
-/**
- * Programa/actualiza un recordatorio por hábito.
- * - offsetMinutes: minutos ANTES de la hora de inicio (0 = justo a la hora)
- * - null no se maneja aquí: si quieres "sin recordatorio" llama cancelHabitReminder()
- */
-export async function scheduleHabitReminder(options: {
-  habitId: HabitId;
-  habitName: string;
-  hour: number;
-  minute: number;
-  offsetMinutes?: number; // default 0
-}) {
-  if (isExpoGo) return;
-
-  const Notifs = getNotifsOrNull();
-  if (!Notifs) return;
 
   const ok = await requestNotificationPermission();
   if (!ok) return;
 
-  const offset = Math.max(0, options.offsetMinutes ?? 0);
+  // 1) cancelar TODO lo anterior por habitId (esto mata el duplicado real)
+  await container.notificationScheduler.cancelByHabitId(habit.id);
 
-  // ✅ Upsert: cancela el anterior primero
-  await cancelHabitReminder(options.habitId);
+  // 2) si además hay ids guardados, cancelarlos también
+  if (habit.notificationIds?.length) {
+    await container.notificationScheduler.cancel(habit.notificationIds);
+  }
 
-  // Calcular hora/minuto con offset "antes"
-  const total = options.hour * 60 + options.minute - offset;
-  const safe = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
-  const h = Math.floor(safe / 60);
-  const m = safe % 60;
+  // 3) si no hay recordatorio, dejar limpio
+  if (habit.reminderOffsetMinutes === null) {
+    await container.habitRepository.updateNotifications(habit.id, []);
+    return;
+  }
 
-  const trigger: NotificationsType.NotificationTriggerInput = {
-    type: Notifs.SchedulableTriggerInputTypes.CALENDAR,
-    hour: h,
-    minute: m,
-    repeats: true,
+  const plan: HabitNotificationPlan = {
+    habitId: habit.id,
+    name: habit.name,
+    icon: habit.icon,
+    startTime: habit.startTime ?? habit.time ?? "08:00",
+    schedule: habit.schedule as any,
+    reminderOffsetMinutes: habit.reminderOffsetMinutes ?? 0,
   };
 
-  // IMPORTANTE: NO usamos identifier = habitId porque ese identifier NO sirve
-  // para cancelar por identifier; expo te devuelve un id real.
-  const notificationId = await Notifs.scheduleNotificationAsync({
-    content: {
-      title: options.habitName,
-      body:
-        offset > 0
-          ? `En ${offset} min comienza tu hábito`
-          : "Es hora de tu hábito",
-      sound: Platform.OS === "ios" ? "default" : undefined,
-    },
-    trigger,
+  const ids = await container.notificationScheduler.scheduleForHabit(plan, {
+    horizonDays: options?.horizonDays ?? 30,
   });
 
-  // Guardar id real para poder cancelarlo después
-  await setHabitNotificationId(options.habitId, notificationId);
-
-  return notificationId;
+  // 4) persistir ids nuevos
+  await container.habitRepository.updateNotifications(habit.id, ids);
 }
 
 // ==========================
