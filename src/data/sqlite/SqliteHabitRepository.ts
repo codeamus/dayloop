@@ -4,6 +4,7 @@ import type {
   Habit,
   HabitId,
   HabitSchedule,
+  PauseReason,
   TimeOfDay,
 } from "@/domain/entities/Habit";
 import type { HabitRepository } from "@/domain/repositories/HabitRepository";
@@ -20,15 +21,19 @@ type HabitRow = {
   end_condition: string | null;
   time_of_day: string | null;
 
-  time: string | null; // legacy
+  time: string | null;
   start_time: string | null;
   end_time: string | null;
 
   calendar_event_id: string | null;
   reminder_offset_minutes: number | null;
 
-  // ✅ nuevo en V4
   notification_ids?: string | null;
+
+  // ✅ pause
+  is_paused?: number | null;
+  paused_at?: string | null;
+  pause_reason?: PauseReason | null;
 };
 
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
@@ -74,6 +79,8 @@ function toHabit(row: HabitRow): Habit {
     []
   ).filter((x) => typeof x === "string");
 
+  const isPaused = (row.is_paused ?? 0) === 1;
+
   return {
     id: row.id,
     name: row.name,
@@ -85,7 +92,6 @@ function toHabit(row: HabitRow): Habit {
     startTime,
     endTime,
 
-    // legacy
     time: row.time ?? startTime,
 
     timeOfDay: normalizeTimeOfDay(row.time_of_day),
@@ -100,8 +106,12 @@ function toHabit(row: HabitRow): Habit {
 
     endCondition,
 
-    // ✅
     notificationIds,
+
+    // ✅ pause
+    isPaused,
+    pausedAt: row.paused_at ?? null,
+    pauseReason: row.pause_reason ?? null,
   };
 }
 
@@ -117,7 +127,6 @@ export class SqliteHabitRepository implements HabitRepository {
 
     const startTime = habit.startTime ?? habit.time ?? "08:00";
     const endTime = habit.endTime ?? "08:30";
-
     const timeOfDay = habit.timeOfDay ?? "morning";
 
     db.runSync(
@@ -130,8 +139,9 @@ export class SqliteHabitRepository implements HabitRepository {
         start_time, end_time,
         calendar_event_id,
         reminder_offset_minutes,
-        notification_ids
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        notification_ids,
+        is_paused, paused_at, pause_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         habit.id,
@@ -155,6 +165,10 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.reminderOffsetMinutes ?? null,
 
         JSON.stringify(habit.notificationIds ?? []),
+
+        habit.isPaused ? 1 : 0,
+        habit.pausedAt ?? null,
+        habit.pauseReason ?? null,
       ]
     );
   }
@@ -177,7 +191,6 @@ export class SqliteHabitRepository implements HabitRepository {
     return row ? toHabit(row) : null;
   }
 
-  // ✅ FIX: faltaba este método (por eso crasheaba al actualizar horas)
   async update(habit: Habit): Promise<void> {
     const scheduleType = habit.schedule?.type ?? "daily";
     const scheduleDays =
@@ -211,7 +224,11 @@ export class SqliteHabitRepository implements HabitRepository {
 
         calendar_event_id = ?,
         reminder_offset_minutes = ?,
-        notification_ids = ?
+        notification_ids = ?,
+
+        is_paused = ?,
+        paused_at = ?,
+        pause_reason = ?
 
       WHERE id = ?
       `,
@@ -234,18 +251,36 @@ export class SqliteHabitRepository implements HabitRepository {
         habit.reminderOffsetMinutes ?? null,
         JSON.stringify(habit.notificationIds ?? []),
 
+        habit.isPaused ? 1 : 0,
+        habit.pausedAt ?? null,
+        habit.pauseReason ?? null,
+
         habit.id,
       ]
     );
   }
 
-  async updateNotifications(
-    id: HabitId,
-    notificationIds: string[]
-  ): Promise<void> {
+  async updateNotifications(id: HabitId, notificationIds: string[]) {
     db.runSync(`UPDATE habits SET notification_ids = ? WHERE id = ?`, [
       JSON.stringify(notificationIds ?? []),
       id,
     ]);
+  }
+
+  async updatePauseState(params: {
+    id: HabitId;
+    isPaused: boolean;
+    pausedAt: string | null;
+    pauseReason: PauseReason | null;
+  }): Promise<void> {
+    db.runSync(
+      `UPDATE habits SET is_paused = ?, paused_at = ?, pause_reason = ? WHERE id = ?`,
+      [
+        params.isPaused ? 1 : 0,
+        params.pausedAt ?? null,
+        params.pauseReason ?? null,
+        params.id,
+      ]
+    );
   }
 }

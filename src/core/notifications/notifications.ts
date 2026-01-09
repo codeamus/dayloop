@@ -4,7 +4,10 @@ import Constants from "expo-constants";
 import type * as NotificationsType from "expo-notifications";
 import { Platform } from "react-native";
 
-// Expo Go Android: limitaciones (y en general Expo Go)
+// ✅ AsyncStorage para persistir el notificationId por hábito
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// Expo Go Android/iOS: limitaciones (y en general Expo Go)
 const isExpoGo =
   (Platform.OS === "android" || Platform.OS === "ios") &&
   Constants.appOwnership === "expo";
@@ -22,6 +25,9 @@ function getNotifsOrNull() {
 
 // IDs estables
 const DAILY_ID = "daily-summary";
+
+// Storage keys (por hábito)
+const habitKey = (habitId: HabitId) => `dayloop:notif:habit:${habitId}`;
 
 // ==========================
 // Config global (idempotente)
@@ -130,19 +136,111 @@ export async function scheduleDailyReminder(hour: number, minute: number) {
 }
 
 // ==========================
-// ❌ DEPRECATED: Recordatorio por hábito
+// ✅ Recordatorios por hábito (upsert/cancel)
 // ==========================
-export async function scheduleHabitReminder(_options: {
+async function getHabitNotificationId(
+  habitId: HabitId
+): Promise<string | null> {
+  try {
+    const v = await AsyncStorage.getItem(habitKey(habitId));
+    return v || null;
+  } catch {
+    return null;
+  }
+}
+
+async function setHabitNotificationId(
+  habitId: HabitId,
+  notificationId: string | null
+) {
+  try {
+    if (!notificationId) {
+      await AsyncStorage.removeItem(habitKey(habitId));
+      return;
+    }
+    await AsyncStorage.setItem(habitKey(habitId), notificationId);
+  } catch {
+    // noop
+  }
+}
+
+/**
+ * Cancela el recordatorio actual de un hábito (si existe)
+ */
+export async function cancelHabitReminder(habitId: HabitId) {
+  if (isExpoGo) return;
+
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return;
+
+  const existing = await getHabitNotificationId(habitId);
+  if (!existing) return;
+
+  try {
+    await Notifs.cancelScheduledNotificationAsync(existing);
+  } catch {
+    // si no existía, da lo mismo
+  } finally {
+    await setHabitNotificationId(habitId, null);
+  }
+}
+
+/**
+ * Programa/actualiza un recordatorio por hábito.
+ * - offsetMinutes: minutos ANTES de la hora de inicio (0 = justo a la hora)
+ * - null no se maneja aquí: si quieres "sin recordatorio" llama cancelHabitReminder()
+ */
+export async function scheduleHabitReminder(options: {
   habitId: HabitId;
   habitName: string;
   hour: number;
   minute: number;
-  offsetMinutes?: number;
+  offsetMinutes?: number; // default 0
 }) {
-  // intentionally no-op
-  console.warn(
-    "[notifications] scheduleHabitReminder() deprecated (no-op). Use NotificationScheduler."
-  );
+  if (isExpoGo) return;
+
+  const Notifs = getNotifsOrNull();
+  if (!Notifs) return;
+
+  const ok = await requestNotificationPermission();
+  if (!ok) return;
+
+  const offset = Math.max(0, options.offsetMinutes ?? 0);
+
+  // ✅ Upsert: cancela el anterior primero
+  await cancelHabitReminder(options.habitId);
+
+  // Calcular hora/minuto con offset "antes"
+  const total = options.hour * 60 + options.minute - offset;
+  const safe = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+
+  const trigger: NotificationsType.NotificationTriggerInput = {
+    type: Notifs.SchedulableTriggerInputTypes.CALENDAR,
+    hour: h,
+    minute: m,
+    repeats: true,
+  };
+
+  // IMPORTANTE: NO usamos identifier = habitId porque ese identifier NO sirve
+  // para cancelar por identifier; expo te devuelve un id real.
+  const notificationId = await Notifs.scheduleNotificationAsync({
+    content: {
+      title: options.habitName,
+      body:
+        offset > 0
+          ? `En ${offset} min comienza tu hábito`
+          : "Es hora de tu hábito",
+      sound: Platform.OS === "ios" ? "default" : undefined,
+    },
+    trigger,
+  });
+
+  // Guardar id real para poder cancelarlo después
+  await setHabitNotificationId(options.habitId, notificationId);
+
+  return notificationId;
 }
 
 // ==========================
