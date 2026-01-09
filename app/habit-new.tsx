@@ -388,7 +388,9 @@ export default function HabitNewScreen() {
               </View>
             </Pressable>
           </View>
-
+          <Text style={styles.timeHint}>
+            Inicio = cuando comienza tu hábito. Fin = cuando termina.
+          </Text>
           {showTimePicker && (
             <View style={styles.timePickerContainer}>
               <DateTimePicker
@@ -586,6 +588,13 @@ const styles = StyleSheet.create({
   field: { gap: 8, marginTop: 6 },
   label: { fontSize: 13, color: colors.mutedText, fontWeight: "900" },
   helper: { fontSize: 12, color: colors.mutedText, lineHeight: 16 },
+  timeHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: colors.mutedText,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
 
   input: {
     borderRadius: 14,
