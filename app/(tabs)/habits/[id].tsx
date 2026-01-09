@@ -1,5 +1,9 @@
 // app/(tabs)/habits/[id].tsx
 import { container } from "@/core/di/container";
+import {
+  cancelHabitReminder,
+  scheduleHabitReminder,
+} from "@/core/notifications/notifications";
 import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
 import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
@@ -15,7 +19,7 @@ import { addMinutesHHmm } from "@/utils/time";
 import { getTimeOfDayFromHour } from "@/utils/timeOfDay";
 import { Feather } from "@expo/vector-icons";
 import DateTimePicker, {
-  DateTimePickerEvent,
+  type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -94,6 +98,22 @@ export default function EditHabitScreen() {
     refresh: refreshMonthly,
   } = useHabitMonthlyStats(habitId);
 
+  const REMINDER_OPTIONS = useMemo(
+    () => [
+      { label: "Sin recordatorio", value: null as null | number },
+      { label: "Justo a la hora", value: 0 },
+      { label: "5 min antes", value: 5 },
+      { label: "10 min antes", value: 10 },
+      { label: "30 min antes", value: 30 },
+      { label: "1 hora antes", value: 60 },
+    ],
+    []
+  );
+
+  const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState<
+    number | null
+  >(0);
+
   const [name, setName] = useState("");
   const [scheduleType, setScheduleType] = useState<ScheduleType>("daily");
 
@@ -113,8 +133,8 @@ export default function EditHabitScreen() {
   const [pickerDate, setPickerDate] = useState<Date>(() =>
     buildDateForTime("08:00")
   );
-  const [isColorSheetOpen, setIsColorSheetOpen] = useState(false);
 
+  const [isColorSheetOpen, setIsColorSheetOpen] = useState(false);
   const [isEmojiSheetOpen, setIsEmojiSheetOpen] = useState(false);
 
   const { toggle: toggleForDate } = useToggleHabitForDate(habitId);
@@ -131,6 +151,13 @@ export default function EditHabitScreen() {
     setName(habit.name);
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || "📚");
+
+    // ✅ reminder init (aquí sí existe habit)
+    setReminderOffsetMinutes(
+      (habit as any).reminderOffsetMinutes === undefined
+        ? 0
+        : ((habit as any).reminderOffsetMinutes as number | null)
+    );
 
     // schedule init
     if (habit.schedule.type === "daily") {
@@ -287,9 +314,28 @@ export default function EditHabitScreen() {
       endTime,
       time: startTime,
       timeOfDay,
+      reminderOffsetMinutes,
     };
 
     await container.updateHabit.execute(updated);
+
+    // ✅ Reprogramar notificación (o cancelarla)
+    if (reminderOffsetMinutes === null) {
+      await cancelHabitReminder(habit.id);
+    } else {
+      const [hStr, mStr] = startTime.split(":");
+      const hour = Number(hStr);
+      const minute = Number(mStr);
+
+      await scheduleHabitReminder({
+        habitId: habit.id,
+        habitName: trimmed,
+        hour,
+        minute,
+        offsetMinutes: reminderOffsetMinutes ?? 0,
+      });
+    }
+
     await refreshMonthly();
     router.back();
   }
@@ -306,6 +352,8 @@ export default function EditHabitScreen() {
           text: "Eliminar",
           style: "destructive",
           onPress: async () => {
+            // ✅ cancelar recordatorio colgado
+            await cancelHabitReminder(habit.id);
             await container.deleteHabit.execute(habit.id);
             router.back();
           },
@@ -685,6 +733,52 @@ export default function EditHabitScreen() {
             )}
           </View>
         )}
+
+        {/* Recordatorio */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Recordatorio</Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            {REMINDER_OPTIONS.map((opt) => {
+              const active = reminderOffsetMinutes === opt.value;
+              return (
+                <Pressable
+                  key={String(opt.value)}
+                  onPress={() => setReminderOffsetMinutes(opt.value)}
+                  style={[
+                    {
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      backgroundColor: "rgba(43,62,74,0.25)",
+                    },
+                    active && {
+                      backgroundColor: "rgba(230,188,1,0.18)",
+                      borderColor: "rgba(230,188,1,0.55)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      { fontSize: 13, color: colors.text, fontWeight: "800" },
+                      active && { color: colors.primary, fontWeight: "900" },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
 
         <Pressable onPress={handleSave} style={styles.btn}>
           <Text style={styles.btnText}>Guardar cambios</Text>
