@@ -13,6 +13,7 @@ import { ActivityIndicator, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { initReviewTracking } from "@/core/review/reviewPrompt";
 import { ToastProvider } from "@/presentation/components/ToastProvider";
 import { useOnboardingGate } from "@/presentation/hooks/useOnboardingGate";
 import { colors } from "@/theme/colors";
@@ -38,9 +39,6 @@ function AppBootLoader() {
 }
 
 export default function RootLayout() {
-  // Si initDatabase ya es idempotente, ok aquí.
-  initDatabase();
-
   const router = useRouter();
   const segments = useSegments();
   const navState = useRootNavigationState();
@@ -74,7 +72,9 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
+    initDatabase();
     initNotificationsConfig();
+    void initReviewTracking();
   }, []);
 
   useEffect(() => {
