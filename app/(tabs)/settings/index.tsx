@@ -29,6 +29,12 @@ try {
   StoreReview = null;
 }
 
+const APP_STORE_REVIEW_URL =
+  "https://apps.apple.com/es/app/dayloop-h%C3%A1bitos-diarios/id6757437094?action=write-review";
+
+const PLAY_STORE_REVIEW_URL = (packageName: string) =>
+  `https://play.google.com/store/apps/details?id=com.codeamus.dayloop&reviewId=0`;
+
 export default function SettingsScreen() {
   const [permState, setPermState] = useState<PermissionState>("loading");
   const [busy, setBusy] = useState(false);
@@ -171,27 +177,34 @@ export default function SettingsScreen() {
   // =========================
   async function onPressRateApp() {
     try {
-      if (!StoreReview) {
-        Alert.alert(
-          "No disponible",
-          "Rate app requiere un build nativo con expo-store-review instalado."
-        );
+      // 1) Intentar prompt nativo (mejor UX)
+      if (StoreReview) {
+        const available = await StoreReview.isAvailableAsync();
+        if (available) {
+          await StoreReview.requestReview();
+          return;
+        }
+      }
+
+      // 2) Fallback: abrir store
+      if (Platform.OS === "ios") {
+        await Linking.openURL(APP_STORE_REVIEW_URL);
         return;
       }
 
-      const available = await StoreReview.isAvailableAsync();
-      if (!available) {
+      // Android
+      const pkg = Application.applicationId; // ✅ expo-application
+      if (!pkg) {
         Alert.alert(
           "No disponible",
-          "El sistema no permite mostrar el prompt de rating en este dispositivo."
+          "No se pudo obtener el package de Android."
         );
         return;
       }
-
-      await StoreReview.requestReview();
+      await Linking.openURL(PLAY_STORE_REVIEW_URL(pkg));
     } catch (e) {
       console.error("[Settings] rateApp error", e);
-      Alert.alert("Error", "No se pudo abrir el rating.");
+      Alert.alert("No disponible", "No se pudo abrir la pantalla de reseña.");
     }
   }
 
@@ -411,7 +424,7 @@ export default function SettingsScreen() {
             onPress={onPressRateApp}
             disabled={busy}
           >
-            <Text style={styles.cancelText}>Rate app</Text>
+            <Text style={styles.cancelText}>Dejar reseña ⭐️</Text>
           </Pressable>
         </View>
 
