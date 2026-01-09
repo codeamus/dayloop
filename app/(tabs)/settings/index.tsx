@@ -1,6 +1,8 @@
 // app/settings/index.tsx
+import { resetDatabase } from "@/data/sqlite/database";
 import { Screen } from "@/presentation/components/Screen";
 import { colors } from "@/theme/colors";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as Notifications from "expo-notifications";
 import { Link, router } from "expo-router";
@@ -22,7 +24,6 @@ type PermissionState = "loading" | "granted" | "denied" | "undetermined";
 
 let StoreReview: typeof import("expo-store-review") | null = null;
 try {
-   
   StoreReview = require("expo-store-review");
 } catch {
   StoreReview = null;
@@ -118,73 +119,6 @@ export default function SettingsScreen() {
     }
   }
 
-  async function testNotificationIn5s() {
-    try {
-      setBusy(true);
-
-      await ensureAndroidChannel();
-
-      const ok = await ensurePermission();
-      await refreshPermission();
-
-      if (!ok) {
-        Alert.alert("Permiso requerido", "Activa notificaciones para probar.");
-        return;
-      }
-
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "DEBUG DAYLOOP",
-          body: "Si ves esto, las notificaciones funcionan ✅",
-          sound: Platform.OS === "ios" ? "default" : undefined,
-        },
-        trigger: { seconds: 5 },
-      });
-
-      Alert.alert("Listo", `Programada en 5s.\nID: ${id}`);
-    } catch (e) {
-      console.error("[Settings] testNotificationIn5s error", e);
-      Alert.alert("Error", "Falló la prueba de notificación.");
-    } finally {
-      setBusy(false);
-      await refreshPermission();
-    }
-  }
-
-  async function listScheduledNotifications() {
-    try {
-      setBusy(true);
-
-      const all = await Notifications.getAllScheduledNotificationsAsync();
-      if (!all.length) {
-        Alert.alert("Programadas", "No hay notificaciones programadas.");
-        return;
-      }
-
-      const preview = all
-        .slice(0, 8)
-        .map((n, i) => {
-          const title = n.content?.title ?? "(sin título)";
-          const body = n.content?.body ?? "";
-          const trigger = JSON.stringify(n.trigger ?? {});
-          return `${i + 1}) ${title} — ${body}\nID: ${
-            n.identifier
-          }\nTrigger: ${trigger}`;
-        })
-        .join("\n\n");
-
-      Alert.alert(
-        `Programadas (${all.length})`,
-        preview.length > 3500 ? preview.slice(0, 3500) + "…" : preview
-      );
-    } catch (e) {
-      console.error("[Settings] listScheduledNotifications error", e);
-      Alert.alert("Error", "No se pudieron listar las programadas.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function cancelAllScheduledNotifications() {
     try {
       setBusy(true);
@@ -213,23 +147,12 @@ export default function SettingsScreen() {
           onPress: async () => {
             try {
               setBusy(true);
-
-              // 1) Notificaciones
               await Notifications.cancelAllScheduledNotificationsAsync();
-
-              // 2) Datos locales
-              // ⚠️ Aquí depende de tu infraestructura:
-              // - Si usas AsyncStorage: AsyncStorage.clear()
-              // - Si usas SQLite: borrar DB / reinicializar
-              //
-              // Como no tengo tus módulos aquí, dejo el hook claro:
-              // TODO: Implementar reset real (AsyncStorage + SQLite)
-              //
-              // Importante: NO invento paths ni funciones que no existen.
-
+              resetDatabase();
+              await AsyncStorage.clear();
               Alert.alert(
                 "Listo",
-                "Se limpiaron notificaciones. Ahora implementemos el borrado de DB/Storage en el siguiente paso."
+                "La app quedó limpia (como recién instalada)."
               );
             } catch (e) {
               console.error("[Settings] resetApp error", e);
@@ -246,32 +169,31 @@ export default function SettingsScreen() {
   // =========================
   // Soporte
   // =========================
-async function onPressRateApp() {
-  try {
-    if (!StoreReview) {
-      Alert.alert(
-        "No disponible",
-        "Rate app requiere un build nativo con expo-store-review instalado."
-      );
-      return;
-    }
+  async function onPressRateApp() {
+    try {
+      if (!StoreReview) {
+        Alert.alert(
+          "No disponible",
+          "Rate app requiere un build nativo con expo-store-review instalado."
+        );
+        return;
+      }
 
-    const available = await StoreReview.isAvailableAsync();
-    if (!available) {
-      Alert.alert(
-        "No disponible",
-        "El sistema no permite mostrar el prompt de rating en este dispositivo."
-      );
-      return;
-    }
+      const available = await StoreReview.isAvailableAsync();
+      if (!available) {
+        Alert.alert(
+          "No disponible",
+          "El sistema no permite mostrar el prompt de rating en este dispositivo."
+        );
+        return;
+      }
 
-    await StoreReview.requestReview();
-  } catch (e) {
-    console.error("[Settings] rateApp error", e);
-    Alert.alert("Error", "No se pudo abrir el rating.");
+      await StoreReview.requestReview();
+    } catch (e) {
+      console.error("[Settings] rateApp error", e);
+      Alert.alert("Error", "No se pudo abrir el rating.");
+    }
   }
-}
-
 
   // =========================
   // Info
@@ -423,7 +345,9 @@ async function onPressRateApp() {
             onPress={cancelAllScheduledNotifications}
             disabled={busy}
           >
-            <Text style={styles.dangerText}>Borrar notificaciones programadas</Text>
+            <Text style={styles.dangerText}>
+              Borrar notificaciones programadas
+            </Text>
           </Pressable>
         </View>
 

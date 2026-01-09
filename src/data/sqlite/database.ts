@@ -179,3 +179,43 @@ function safeAddColumn(table: string, column: string, type: string) {
     // ya existe
   }
 }
+
+export function resetDatabase() {
+  // ✅ Reset real: deja la DB como recién instalada
+  // - Borra tablas
+  // - Resetea user_version
+  // - Recrea schema + migraciones via initDatabase()
+
+  try {
+    db.execSync(`BEGIN TRANSACTION;`);
+
+    // (Opcional pero recomendable) corta WAL para evitar residuos
+    try {
+      db.execSync(`PRAGMA wal_checkpoint(TRUNCATE);`);
+    } catch {}
+
+    db.execSync(`
+      DROP TABLE IF EXISTS habit_logs;
+      DROP TABLE IF EXISTS habits;
+    `);
+
+    // Resetea versión para que initDatabase vuelva a correr migraciones/schema limpio
+    db.execSync(`PRAGMA user_version = 0;`);
+
+    db.execSync(`COMMIT;`);
+
+    // Limpieza física (no siempre es instantáneo en WAL, pero ayuda)
+    try {
+      db.execSync(`VACUUM;`);
+    } catch {}
+
+    // ✅ Re-crear todo tal como una instalación nueva
+    initDatabase();
+  } catch (e) {
+    try {
+      db.execSync(`ROLLBACK;`);
+    } catch {}
+    console.error("[DB] resetDatabase failed", e);
+    throw e;
+  }
+}
