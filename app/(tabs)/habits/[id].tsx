@@ -704,9 +704,12 @@ export default function EditHabitScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.timeHint}>
-          Inicio = cuando comienza tu hábito. Fin = cuando termina.
-        </Text>
+        <View style={styles.timeHintRow}>
+          <Feather name="info" size={16} color={colors.primary} />
+          <Text style={styles.timeHintText}>
+            Inicio = cuando comienza tu hábito.{"\n"}Fin = cuando termina.
+          </Text>
+        </View>
 
         {showTimePicker && (
           <View style={styles.timePickerContainer}>
@@ -907,12 +910,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  timeHint: {
-    marginTop: 8,
+  timeHintRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.14)",
+    backgroundColor: "rgba(241,233,215,0.08)",
+  },
+  timeHintText: {
+    flex: 1,
     fontSize: 12,
     color: colors.mutedText,
     lineHeight: 16,
-    fontWeight: "700",
+    fontWeight: "800",
   },
 
   segmentContainer: {
