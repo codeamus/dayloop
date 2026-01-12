@@ -1,19 +1,20 @@
 // app/(tabs)/_layout.tsx
 import { colors } from "@/theme/colors";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, usePathname, useRouter } from "expo-router";
-import { Platform } from "react-native";
+import { Tabs, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
-  const router = useRouter();
 
-  const extraBottom =
-    Platform.OS === "android" ? insets.bottom || 8 : insets.bottom;
+  const isHabitNewOpen = pathname === "/habit-new";
 
-  const isHabitModalOpen = pathname === "/habit-new";
+  const BASE_HEIGHT = 58; // tu altura actual
+  const TOP_PADDING = 8; // tu paddingTop actual
+  const EXTRA_AIR = 8; // 👈 valor seguro
+
+  const bottom = insets.bottom + EXTRA_AIR;
 
   return (
     <Tabs
@@ -27,11 +28,13 @@ export default function TabsLayout() {
             borderTopWidth: 1,
             borderTopColor: colors.border,
             paddingHorizontal: 12,
-            height: 58 + extraBottom,
-            paddingBottom: extraBottom,
-            paddingTop: 8,
+
+            // ✅ la clave
+            height: BASE_HEIGHT + bottom,
+            paddingBottom: bottom,
+            paddingTop: TOP_PADDING,
           },
-          isHabitModalOpen && { display: "none" },
+          isHabitNewOpen && { display: "none" },
         ],
         tabBarLabelStyle: {
           fontSize: 10,
