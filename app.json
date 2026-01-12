@@ -32,7 +32,7 @@
       "buildNumber": "1"
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-icon.png",
         "monochromeImage": "./assets/icons/adaptive-icon.png",
