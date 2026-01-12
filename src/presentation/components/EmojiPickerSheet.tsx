@@ -11,6 +11,11 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
 
+// ✅ (Opcional pero recomendado) Mapa ES generado desde CLDR.
+// Crea este archivo con el script que te pasé: src/assets/emoji/es.json
+// Si aún no lo tienes, deja este import comentado y el picker seguirá funcionando con sinónimos ES básicos.
+// import emojiEs from "@/assets/emoji/es.json";
+
 type EmojiRow = {
   unified: string;
   short_name?: string;
@@ -31,15 +36,60 @@ type Props = {
 const RECENTS_KEY = "dayloop:emoji_recents_v1";
 const RECENTS_MAX = 24;
 
+// ✅ Sinónimos ES → EN (capa rápida). Esto NO cubre todo el universo de emojis.
+// Para cobertura completa (perro/gato/etc. para TODOS), usa el JSON CLDR (emojiEs).
+const ES_SYNONYMS: Record<string, string[]> = {
+  // genéricos
+  agua: ["droplet", "water"],
+  correr: ["run", "runner", "running"],
+  libro: ["book", "books"],
+  estudiar: ["study", "student", "books"],
+  trabajo: ["work", "briefcase"],
+  gimnasio: ["gym", "weight_lifting", "dumbbell"],
+  dormir: ["sleep", "sleeping", "zzz", "bed"],
+  comida: ["food", "meal"],
+  viaje: ["travel", "plane", "airplane"],
+  bandera: ["flag"],
+  pais: ["flag"],
+
+  // animales comunes (mejora inmediata)
+  perro: ["dog", "puppy", "poodle", "pet"],
+  gato: ["cat", "kitten", "pet"],
+  pajaro: ["bird"],
+  pez: ["fish"],
+  caballo: ["horse"],
+  conejo: ["rabbit"],
+  tortuga: ["turtle"],
+
+  // países/banderas (puedes ampliar)
+  chile: ["flag-cl", "flag_chile", "chile"],
+  argentina: ["flag-ar", "flag_argentina", "argentina"],
+  mexico: ["flag-mx", "flag_mexico", "mexico"],
+  espana: ["flag-es", "flag_spain", "spain", "españa"],
+  usa: ["flag-us", "flag_usa", "united_states", "us"],
+  eeuu: ["flag-us", "united_states", "us"],
+  brasil: ["flag-br", "flag_brazil", "brazil"],
+};
+
 function unifiedToChar(unified: string): string {
   const codes = unified.split("-").map((hex) => parseInt(hex, 16));
   return String.fromCodePoint(...codes);
 }
 
+function normalize(s: string) {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function safeIncludes(hay?: string, needle?: string) {
   if (!hay || !needle) return false;
-  return hay.toLowerCase().includes(needle.toLowerCase());
+  return normalize(hay).includes(normalize(needle));
 }
+
+// type EmojiEsEntry = { tts?: string; keywords?: string[] };
+// const emojiEsMap = emojiEs as Record<string, EmojiEsEntry>;
 
 const CATEGORIES: { key: string; label: string }[] = [
   { key: "Smileys & Emotion", label: "🙂" },
@@ -87,6 +137,17 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
     sheetRef.current?.dismiss();
   }, [visible]);
 
+  // ✅ UX: si escribe bandera/país o nombre país conocido → mueve a Flags
+  useEffect(() => {
+    const q = normalize(query.trim());
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const wantsFlag =
+      tokens.includes("bandera") ||
+      tokens.includes("pais") ||
+      tokens.some((t) => ES_SYNONYMS[t]?.some((s) => s.startsWith("flag")));
+    if (wantsFlag) setCategory("Flags");
+  }, [query]);
+
   const allEmojis: EmojiRow[] = useMemo(() => {
     return (emojiDatasource as any as EmojiRow[]).filter(
       (e) => e?.unified && (e.has_img_apple || e.has_img_google)
@@ -94,17 +155,41 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
   }, []);
 
   const filtered: EmojiRow[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const raw = query.trim();
+    const q = normalize(raw);
+
+    // ✅ expandimos query: "bandera chile" → ["bandera chile", "bandera", "chile", "flag", "flag-cl", ...]
+    const tokens = q.split(/\s+/).filter(Boolean);
+    const expanded = new Set<string>();
+
+    if (q) expanded.add(q);
+
+    for (const t of tokens) {
+      expanded.add(t);
+      const syns = ES_SYNONYMS[t];
+      if (syns) syns.forEach((s) => expanded.add(normalize(s)));
+    }
+
+    const expandedArr = Array.from(expanded);
+
     return allEmojis
       .filter((e) => (category ? e.category === category : true))
       .filter((e) => {
         if (!q) return true;
-        const s1 = e.short_name ?? "";
-        const s2 = e.name ?? "";
-        const kws = Array.isArray(e.keywords) ? e.keywords.join(" ") : "";
-        return (
-          safeIncludes(s1, q) || safeIncludes(s2, q) || safeIncludes(kws, q)
-        );
+
+        const en1 = e.short_name ?? "";
+        const en2 = e.name ?? "";
+        const enKws = Array.isArray(e.keywords) ? e.keywords.join(" ") : "";
+
+        // ✅ Si ya tienes CLDR ES, descomenta emojiEsMap y agrega:
+        // const es = emojiEsMap[e.unified];
+        // const es1 = es?.tts ?? "";
+        // const esKws = Array.isArray(es?.keywords) ? es!.keywords!.join(" ") : "";
+        // const haystack = `${en1} ${en2} ${enKws} ${es1} ${esKws}`;
+
+        const haystack = `${en1} ${en2} ${enKws}`;
+
+        return expandedArr.some((term) => safeIncludes(haystack, term));
       });
   }, [allEmojis, category, query]);
 
@@ -145,7 +230,6 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
       enableHandlePanningGesture={false}
       enableContentPanningGesture
     >
-      {/* ✅ UN SOLO SCROLL: BottomSheetFlatList */}
       <BottomSheetFlatList
         data={filtered}
         keyExtractor={(item) => item.unified}
@@ -178,7 +262,7 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
               <BottomSheetTextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Buscar emoji… (ej: agua, correr, libro)"
+                placeholder="Buscar emoji… (ej: perro, gato, agua, correr)"
                 placeholderTextColor="rgba(241,233,215,0.35)"
                 style={styles.searchInput}
                 autoCorrect={false}
