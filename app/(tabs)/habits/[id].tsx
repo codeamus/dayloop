@@ -36,13 +36,13 @@ import {
 } from "react-native";
 
 const WEEK_DAYS = [
-  { label: "D", value: 0 },
   { label: "L", value: 1 },
   { label: "M", value: 2 },
   { label: "X", value: 3 },
   { label: "J", value: 4 },
   { label: "V", value: 5 },
   { label: "S", value: 6 },
+  { label: "D", value: 0 },
 ];
 
 const COLOR_PRESETS = ["#e6bc01", "#8ecd6e", "#f1e9d7", "#2b3e4a", "#ef4444"];
