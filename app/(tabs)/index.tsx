@@ -529,17 +529,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
   },
-  summaryHintWrap: { marginTop: 10 },
+  summaryHintWrap: {
+    marginTop: 10,
+    minHeight: 34,
+    justifyContent: "center",
+  },
+
+  inlineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+
   summaryHintText: {
+    flex: 1,
     color: colors.mutedText,
     fontSize: 12,
     fontWeight: "700",
-    lineHeight: 16,
-  },
-  inlineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    lineHeight: 17,
+    paddingTop: 1,
   },
 
   progressTrack: {
