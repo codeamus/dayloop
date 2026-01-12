@@ -11,10 +11,8 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { colors } from "@/theme/colors";
 
-// ✅ (Opcional pero recomendado) Mapa ES generado desde CLDR.
-// Crea este archivo con el script que te pasé: src/assets/emoji/es.json
-// Si aún no lo tienes, deja este import comentado y el picker seguirá funcionando con sinónimos ES básicos.
-// import emojiEs from "@/assets/emoji/es.json";
+// ✅ Actívalo cuando exista el JSON (generado desde CLDR)
+import emojiEs from "@/assets/emoji/es.json";
 
 type EmojiRow = {
   unified: string;
@@ -33,11 +31,12 @@ type Props = {
   onSelect: (emoji: string) => void;
 };
 
+type EmojiEsEntry = { tts?: string; keywords?: string[] };
+
 const RECENTS_KEY = "dayloop:emoji_recents_v1";
 const RECENTS_MAX = 24;
 
-// ✅ Sinónimos ES → EN (capa rápida). Esto NO cubre todo el universo de emojis.
-// Para cobertura completa (perro/gato/etc. para TODOS), usa el JSON CLDR (emojiEs).
+// ✅ Sinónimos ES → EN (fallback útil incluso con CLDR)
 const ES_SYNONYMS: Record<string, string[]> = {
   // genéricos
   agua: ["droplet", "water"],
@@ -61,15 +60,27 @@ const ES_SYNONYMS: Record<string, string[]> = {
   conejo: ["rabbit"],
   tortuga: ["turtle"],
 
-  // países/banderas (puedes ampliar)
-  chile: ["flag-cl", "flag_chile", "chile"],
-  argentina: ["flag-ar", "flag_argentina", "argentina"],
-  mexico: ["flag-mx", "flag_mexico", "mexico"],
-  espana: ["flag-es", "flag_spain", "spain", "españa"],
-  usa: ["flag-us", "flag_usa", "united_states", "us"],
+  // países/banderas
+  chile: ["flag-cl", "chile"],
+  argentina: ["flag-ar", "argentina"],
+  mexico: ["flag-mx", "mexico"],
+  espana: ["flag-es", "spain", "españa"],
+  usa: ["flag-us", "united_states", "us"],
   eeuu: ["flag-us", "united_states", "us"],
-  brasil: ["flag-br", "flag_brazil", "brazil"],
+  brasil: ["flag-br", "brazil", "brasil"],
 };
+
+const CATEGORIES: { key: string; label: string }[] = [
+  { key: "Smileys & Emotion", label: "🙂" },
+  { key: "People & Body", label: "🧍" },
+  { key: "Animals & Nature", label: "🐶" },
+  { key: "Food & Drink", label: "🍔" },
+  { key: "Activities", label: "🏃" },
+  { key: "Travel & Places", label: "✈️" },
+  { key: "Objects", label: "📦" },
+  { key: "Symbols", label: "✨" },
+  { key: "Flags", label: "🏳️" },
+];
 
 function unifiedToChar(unified: string): string {
   const codes = unified.split("-").map((hex) => parseInt(hex, 16));
@@ -88,22 +99,86 @@ function safeIncludes(hay?: string, needle?: string) {
   return normalize(hay).includes(normalize(needle));
 }
 
-// type EmojiEsEntry = { tts?: string; keywords?: string[] };
-// const emojiEsMap = emojiEs as Record<string, EmojiEsEntry>;
+function buildEmojiHaystack(
+  e: EmojiRow,
+  emojiEsMap?: Record<string, EmojiEsEntry>
+) {
+  const en1 = e.short_name ?? "";
+  const en2 = e.name ?? "";
+  const enKws = Array.isArray(e.keywords) ? e.keywords.join(" ") : "";
 
-const CATEGORIES: { key: string; label: string }[] = [
-  { key: "Smileys & Emotion", label: "🙂" },
-  { key: "People & Body", label: "🧍" },
-  { key: "Animals & Nature", label: "🐶" },
-  { key: "Food & Drink", label: "🍔" },
-  { key: "Activities", label: "🏃" },
-  { key: "Travel & Places", label: "✈️" },
-  { key: "Objects", label: "📦" },
-  { key: "Symbols", label: "✨" },
-  { key: "Flags", label: "🏳️" },
-];
+  const es = emojiEsMap?.[e.unified];
+  const es1 = es?.tts ?? "";
+  const esKws = Array.isArray(es?.keywords) ? es.keywords.join(" ") : "";
+
+  return `${en1} ${en2} ${enKws} ${es1} ${esKws}`;
+}
+
+function expandQuery(qRaw: string) {
+  const q = normalize(qRaw.trim());
+  if (!q) return { q: "", expandedArr: [] as string[] };
+
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const expanded = new Set<string>();
+  expanded.add(q);
+
+  for (const t of tokens) {
+    expanded.add(t);
+
+    const syns = ES_SYNONYMS[t];
+    if (syns) {
+      for (const s of syns) expanded.add(normalize(s));
+    }
+  }
+
+  return { q, expandedArr: Array.from(expanded) };
+}
+
+/**
+ * Nivel iOS:
+ * - buscamos matches (EN+ES) con query expandida
+ * - contamos por categoría
+ * - elegimos la dominante
+ */
+function inferCategoryFromQuery(
+  emojis: EmojiRow[],
+  qRaw: string,
+  emojiEsMap?: Record<string, EmojiEsEntry>
+): string | null {
+  const { q, expandedArr } = expandQuery(qRaw);
+  if (!q) return null;
+
+  const scores: Record<string, number> = {};
+
+  for (const e of emojis) {
+    const cat = e.category;
+    if (!cat) continue;
+
+    const haystack = buildEmojiHaystack(e, emojiEsMap);
+
+    const matched = expandedArr.some((term) => safeIncludes(haystack, term));
+    if (!matched) continue;
+
+    scores[cat] = (scores[cat] ?? 0) + 1;
+  }
+
+  let best: string | null = null;
+  let max = 0;
+
+  for (const [cat, count] of Object.entries(scores)) {
+    if (count > max) {
+      max = count;
+      best = cat;
+    }
+  }
+
+  return best;
+}
 
 export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
+  // ✅ Mapa ES (CLDR) una vez
+  const emojiEsMap = useMemo(() => emojiEs as Record<string, EmojiEsEntry>, []);
+
   const sheetRef = useRef<BottomSheetModal>(null);
 
   // fijo (no sube a fullscreen)
@@ -114,6 +189,16 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
   const [recents, setRecents] = useState<string[]>([]);
   const [internalOpen, setInternalOpen] = useState(false);
 
+  // ✅ Si el usuario toca una categoría manualmente, no la pisamos con auto-infer.
+  const manualCategoryRef = useRef(false);
+
+  const allEmojis: EmojiRow[] = useMemo(() => {
+    return (emojiDatasource as any as EmojiRow[]).filter(
+      (e) => e?.unified && (e.has_img_apple || e.has_img_google)
+    );
+  }, []);
+
+  // Recents
   useEffect(() => {
     (async () => {
       try {
@@ -128,6 +213,7 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
     })();
   }, []);
 
+  // Open/close
   useEffect(() => {
     if (visible) {
       setInternalOpen(true);
@@ -137,61 +223,38 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
     sheetRef.current?.dismiss();
   }, [visible]);
 
-  // ✅ UX: si escribe bandera/país o nombre país conocido → mueve a Flags
+  // Reset manual override when query clears
   useEffect(() => {
-    const q = normalize(query.trim());
-    const tokens = q.split(/\s+/).filter(Boolean);
-    const wantsFlag =
-      tokens.includes("bandera") ||
-      tokens.includes("pais") ||
-      tokens.some((t) => ES_SYNONYMS[t]?.some((s) => s.startsWith("flag")));
-    if (wantsFlag) setCategory("Flags");
+    if (!query.trim()) manualCategoryRef.current = false;
   }, [query]);
 
-  const allEmojis: EmojiRow[] = useMemo(() => {
-    return (emojiDatasource as any as EmojiRow[]).filter(
-      (e) => e?.unified && (e.has_img_apple || e.has_img_google)
-    );
-  }, []);
+  // ✅ Auto-categoría estilo iOS (con debounce suave)
+  useEffect(() => {
+    if (!query.trim()) return;
+    if (manualCategoryRef.current) return;
+
+    const t = setTimeout(() => {
+      const inferred = inferCategoryFromQuery(allEmojis, query, emojiEsMap);
+      if (inferred && inferred !== category) {
+        setCategory(inferred);
+      }
+    }, 90);
+
+    return () => clearTimeout(t);
+  }, [query, allEmojis, emojiEsMap, category]);
 
   const filtered: EmojiRow[] = useMemo(() => {
-    const raw = query.trim();
-    const q = normalize(raw);
-
-    // ✅ expandimos query: "bandera chile" → ["bandera chile", "bandera", "chile", "flag", "flag-cl", ...]
-    const tokens = q.split(/\s+/).filter(Boolean);
-    const expanded = new Set<string>();
-
-    if (q) expanded.add(q);
-
-    for (const t of tokens) {
-      expanded.add(t);
-      const syns = ES_SYNONYMS[t];
-      if (syns) syns.forEach((s) => expanded.add(normalize(s)));
-    }
-
-    const expandedArr = Array.from(expanded);
+    const { q, expandedArr } = expandQuery(query);
 
     return allEmojis
       .filter((e) => (category ? e.category === category : true))
       .filter((e) => {
         if (!q) return true;
 
-        const en1 = e.short_name ?? "";
-        const en2 = e.name ?? "";
-        const enKws = Array.isArray(e.keywords) ? e.keywords.join(" ") : "";
-
-        // ✅ Si ya tienes CLDR ES, descomenta emojiEsMap y agrega:
-        // const es = emojiEsMap[e.unified];
-        // const es1 = es?.tts ?? "";
-        // const esKws = Array.isArray(es?.keywords) ? es!.keywords!.join(" ") : "";
-        // const haystack = `${en1} ${en2} ${enKws} ${es1} ${esKws}`;
-
-        const haystack = `${en1} ${en2} ${enKws}`;
-
+        const haystack = buildEmojiHaystack(e, emojiEsMap);
         return expandedArr.some((term) => safeIncludes(haystack, term));
       });
-  }, [allEmojis, category, query]);
+  }, [allEmojis, category, query, emojiEsMap]);
 
   async function pushRecent(emoji: string) {
     try {
@@ -214,6 +277,11 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
     setInternalOpen(false);
     setQuery("");
     onClose();
+  }
+
+  function handleCategoryPress(cat: string) {
+    manualCategoryRef.current = true;
+    setCategory(cat);
   }
 
   if (!internalOpen) return null;
@@ -262,7 +330,7 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
               <BottomSheetTextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="Buscar emoji… (ej: perro, gato, agua, correr)"
+                placeholder="Buscar emoji… (ej: perro, gato, bandera chile)"
                 placeholderTextColor="rgba(241,233,215,0.35)"
                 style={styles.searchInput}
                 autoCorrect={false}
@@ -319,7 +387,7 @@ export function EmojiPickerSheet({ visible, value, onClose, onSelect }: Props) {
                   const active = item.key === category;
                   return (
                     <Pressable
-                      onPress={() => setCategory(item.key)}
+                      onPress={() => handleCategoryPress(item.key)}
                       style={[styles.catChip, active && styles.catChipActive]}
                       hitSlop={6}
                     >
