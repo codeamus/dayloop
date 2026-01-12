@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   summaryCard: {
     flex: 1,
     borderRadius: 18,
-    padding: 14,
+    padding: 16,
     backgroundColor: "rgba(50,73,86,0.35)",
     borderWidth: 1,
     borderColor: colors.border,
