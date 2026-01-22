@@ -28,12 +28,12 @@ export class ToggleHabitForDate {
     const existing = logs.find((l) => l.date === date);
 
     const targetRepeats = habit.targetRepeats ?? 1;
-    const mode = habit.mode ?? "bloque";
+    const currentProgress = existing?.progress ?? (existing?.done ? 1 : 0);
+    const isCompleted = currentProgress >= targetRepeats;
 
-    // Para hábitos puntuales completados, hacer toggle (volver a pendientes)
-    // Para hábitos de bloque o puntuales no completados, incrementar progreso
-    if (mode === "puntual" && existing && existing.done) {
-      // Toggle: volver a pendientes
+    // Si el hábito ya está completado (progress >= targetRepeats), volver a pendientes
+    if (isCompleted) {
+      // Toggle: volver a pendientes (resetear progress a 0)
       const nextDone = false;
       const nextProgress = 0;
       await this.habitLogRepository.upsertLog(
@@ -43,7 +43,7 @@ export class ToggleHabitForDate {
         nextProgress
       );
     } else if (targetRepeats > 1) {
-      // Incrementar progreso para hábitos con múltiples repeticiones
+      // Incrementar progreso para hábitos con múltiples repeticiones (si no está completado)
       await this.habitLogRepository.incrementProgress(
         habitId,
         date,

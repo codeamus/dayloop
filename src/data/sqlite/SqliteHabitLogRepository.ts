@@ -214,6 +214,12 @@ export class SqliteHabitLogRepository implements HabitLogRepository {
     ]);
 
     const currentProgress = row?.progress ?? (row?.done ? 1 : 0);
+    
+    // Si ya está completado, no incrementar más (debe usar toggle para volver a pendientes)
+    if (currentProgress >= targetRepeats) {
+      return; // No hacer nada si ya está completado
+    }
+    
     const newProgress = currentProgress + 1;
     const newDone = newProgress >= targetRepeats ? 1 : 0;
 

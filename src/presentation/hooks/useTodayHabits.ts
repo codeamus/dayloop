@@ -124,15 +124,19 @@ export function useTodayHabits() {
     
     if (!habit) return;
 
-    // Para hábitos puntuales completados, volver a pendientes (toggle)
-    if (habit.mode === "puntual" && habit.done) {
-      // Usar toggle tradicional para volver a pendientes
+    const targetRepeats = habit.targetRepeats ?? 1;
+    const currentProgress = habit.progress ?? 0;
+    const isCompleted = currentProgress >= targetRepeats;
+
+    // Si el hábito ya está completado (progress >= targetRepeats), volver a pendientes
+    if (isCompleted) {
+      // Usar toggle tradicional para volver a pendientes (resetear progress a 0)
       await container.toggleHabitForDate.execute({
         habitId: id,
         date: dateStr,
       });
     } else {
-      // Para hábitos de bloque o puntuales no completados, incrementar progreso
+      // Si no está completado, incrementar progreso
       await container.incrementHabitProgress.execute({
         habitId: id,
         date: dateStr,
