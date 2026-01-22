@@ -172,57 +172,24 @@ Un hábito está "due today" si:
 
 **Implementación:** `src/domain/services/habitDue.ts`
 
-## Free vs Premium
+## Modelo de Negocio
 
-### Estado Actual
+**Dayloop es 100% gratuito y sin restricciones.**
 
-Según el código en `src/core/features/features.ts`:
+Todas las funcionalidades están disponibles sin límites:
+- ✅ Creación ilimitada de hábitos
+- ✅ Historial completo sin restricciones: acceso a toda la actividad desde el primer día
+- ✅ Estadísticas avanzadas con agrupación por meses y semanas
+- ✅ Visualización de años de datos con lazy loading optimizado
+- ✅ Sincronización con calendario (si está implementada)
+- ✅ Todas las features disponibles desde el primer uso
 
-```typescript
-export const features = {
-  calendarSync: true, // 👈 hoy free, mañana premium
-};
-```
-
-**Análisis:**
-- Actualmente **NO hay diferenciación** entre Free y Premium en el código
-- `calendarSync` está marcado como `true` (disponible) con un comentario indicando que "hoy es free, mañana será premium"
-- No hay checks de suscripción, límites de hábitos, ni restricciones de features
-
-### Funcionalidades Potenciales para Premium
-
-Basado en el comentario y la estructura del código, las siguientes features podrían ser Premium en el futuro:
-
-1. **Sincronización con Calendario**
-   - `calendarEventId` ya existe en el modelo
-   - `CalendarService.ts` existe en `src/core/calendar/`
-   - Actualmente libre, pero marcado para ser premium
-
-2. **Otras Features Potenciales** (no implementadas aún):
-   - Límite de hábitos (Free: 5, Premium: ilimitado)
-   - Estadísticas avanzadas
-   - Exportación de datos
-   - Temas personalizados
-   - Notificaciones avanzadas
-
-### Implementación Futura
-
-Para implementar Free vs Premium, se recomienda:
-
-1. Crear un servicio de suscripción en `src/core/subscription/`
-2. Agregar checks en casos de uso que requieran premium:
-   ```typescript
-   if (requiresPremium && !subscriptionService.isPremium()) {
-     throw new Error("Feature requires premium");
-   }
-   ```
-3. Actualizar `features.ts` para incluir flags de premium:
-   ```typescript
-   export const features = {
-     calendarSync: subscriptionService.isPremium(),
-     // ...
-   };
-   ```
+**Persistencia Local:**
+- Todos los datos se almacenan localmente en SQLite
+- No hay sincronización en la nube
+- Privacidad total: los datos nunca salen del dispositivo
+- El histórico se obtiene automáticamente desde el primer registro (MIN(date) en habit_logs)
+- Si no hay registros, el inicio es la semana actual
 
 ## Estados de un Hábito en el Calendario Mensual
 
@@ -246,4 +213,4 @@ En `GetHabitMonthlyStats`, cada día del mes tiene un estado:
 | **Due Today** | Hábito que debe realizarse hoy según su schedule |
 | **Paused** | Estado temporal donde el hábito no aparece como "due" |
 | **End Condition** | Fecha de expiración opcional del hábito |
-| **Free vs Premium** | Actualmente no implementado; `calendarSync` marcado para ser premium |
+| **Modelo de Negocio** | 100% gratuito, sin límites ni restricciones |

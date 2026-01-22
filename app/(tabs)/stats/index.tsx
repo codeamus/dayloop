@@ -1,12 +1,11 @@
 // app/stats/index.tsx
+import { HistorySectionList } from "@/presentation/components/HistorySectionList";
 import { Screen } from "@/presentation/components/Screen";
-import {
-  useWeeklySummary,
-  type WeekPreset,
-} from "@/presentation/hooks/useWeeklySummary";
+import { useFullHistory } from "@/presentation/hooks/useFullHistory";
+import { useWeeklySummary } from "@/presentation/hooks/useWeeklySummary";
 import { colors } from "@/theme/colors";
 import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -86,19 +85,34 @@ function AnimatedBar({
 }
 
 export default function StatsScreen() {
-  const [preset, setPreset] = useState<WeekPreset>("current");
-  const { loading, days, error, reload } = useWeeklySummary(preset);
+  const [viewMode, setViewMode] = useState<"summary" | "history">("summary");
+  const { loading, days, error, reload } = useWeeklySummary("current");
+  const {
+    history,
+    loading: historyLoading,
+    loadingMore,
+    loadMore,
+    reload: reloadHistory,
+  } = useFullHistory();
 
   // Pull-to-refresh: no queremos bloquear la pantalla completa
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => {
     try {
       setRefreshing(true);
-      await reload();
+      if (viewMode === "summary") {
+        await reload();
+      } else {
+        await reloadHistory();
+      }
     } finally {
       setRefreshing(false);
     }
   };
+
+  const handleLoadMore = useCallback(() => {
+    loadMore();
+  }, [loadMore]);
 
   const rangeText = useMemo(() => {
     if (!days?.length) return "";
@@ -136,7 +150,7 @@ export default function StatsScreen() {
     return { overallPct, weekPlanned, weekDone, bestDay };
   }, [days]);
 
-  // Animación suave al montar / cambiar preset
+  // Animación suave al montar / cambiar viewMode
   const fade = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(8)).current;
 
@@ -158,10 +172,13 @@ export default function StatsScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [preset, days.length, fade, translate]);
+  }, [viewMode, days.length, fade, translate]);
 
   // Loader solo para el primer load (cuando aún no hay nada)
-  if (loading && days.length === 0) {
+  if (
+    (viewMode === "summary" && loading && days.length === 0) ||
+    (viewMode === "history" && historyLoading && !history)
+  ) {
     return (
       <Screen>
         <View style={styles.center}>
@@ -188,17 +205,67 @@ export default function StatsScreen() {
         <Text style={styles.headerTitle}>Estadísticas</Text>
 
         <Pressable
-          onPress={reload}
-          style={[styles.refreshButton, loading && { opacity: 0.7 }]}
+          onPress={onRefresh}
+          style={[
+            styles.refreshButton,
+            (loading || historyLoading) && { opacity: 0.7 },
+          ]}
           hitSlop={10}
-          disabled={loading}
+          disabled={loading || historyLoading}
         >
           <Text style={styles.refreshText}>↻</Text>
         </Pressable>
       </View>
 
-      {/* ================= CONTENIDO SCROLL ================= */}
-      <ScrollView
+      {/* Selector de vista */}
+      <View style={styles.viewModeSegment}>
+        <Pressable
+          onPress={() => setViewMode("summary")}
+          style={[
+            styles.viewModeBtn,
+            viewMode === "summary" && styles.viewModeBtnActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.viewModeText,
+              viewMode === "summary" && styles.viewModeTextActive,
+            ]}
+          >
+            Resumen
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setViewMode("history")}
+          style={[
+            styles.viewModeBtn,
+            viewMode === "history" && styles.viewModeBtnActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.viewModeText,
+              viewMode === "history" && styles.viewModeTextActive,
+            ]}
+          >
+            Histórico
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* ================= VISTA DE HISTÓRICO ================= */}
+      {viewMode === "history" && (
+        <HistorySectionList
+          history={history}
+          loading={historyLoading}
+          loadingMore={loadingMore}
+          onEndReached={handleLoadMore}
+        />
+      )}
+
+      {/* ================= VISTA DE RESUMEN (SEMANA) ================= */}
+      {viewMode === "summary" && (
+        <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
@@ -215,43 +282,6 @@ export default function StatsScreen() {
             transform: [{ translateY: translate }],
           }}
         >
-          {/* Selector semana */}
-          <View style={styles.segment}>
-            <Pressable
-              onPress={() => setPreset("current")}
-              style={[
-                styles.segmentBtn,
-                preset === "current" && styles.segmentBtnActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  preset === "current" && styles.segmentTextActive,
-                ]}
-              >
-                Semana actual
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setPreset("previous")}
-              style={[
-                styles.segmentBtn,
-                preset === "previous" && styles.segmentBtnActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.segmentText,
-                  preset === "previous" && styles.segmentTextActive,
-                ]}
-              >
-                Semana anterior
-              </Text>
-            </Pressable>
-          </View>
-
           {/* Rango de fechas */}
           {!!rangeText && (
             <View style={styles.rangePill}>
@@ -263,11 +293,7 @@ export default function StatsScreen() {
 
           {/* Resumen global */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {preset === "current"
-                ? "Esta semana (Lun–Dom)"
-                : "Semana anterior (Lun–Dom)"}
-            </Text>
+            <Text style={styles.cardTitle}>Esta semana (Lun–Dom)</Text>
 
             <View style={styles.bigRow}>
               <Text style={styles.cardMainValue}>{computed.overallPct}%</Text>
@@ -344,6 +370,7 @@ export default function StatsScreen() {
           })}
         </Animated.View>
       </ScrollView>
+      )}
     </Screen>
   );
 }
@@ -392,7 +419,7 @@ const styles = StyleSheet.create({
   },
   refreshText: { color: colors.text, fontSize: 16, fontWeight: "900" },
 
-  segment: {
+  viewModeSegment: {
     flexDirection: "row",
     gap: 8,
     padding: 6,
@@ -400,21 +427,27 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(50,73,86,0.40)",
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 10,
+    marginBottom: 16,
   },
-  segmentBtn: {
+  viewModeBtn: {
     flex: 1,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: "center",
   },
-  segmentBtnActive: {
+  viewModeBtnActive: {
     backgroundColor: "rgba(241,233,215,0.10)",
     borderWidth: 1,
     borderColor: colors.border,
   },
-  segmentText: { color: colors.mutedText, fontSize: 12, fontWeight: "900" },
-  segmentTextActive: { color: colors.text },
+  viewModeText: {
+    color: colors.mutedText,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  viewModeTextActive: {
+    color: colors.text,
+  },
 
   rangePill: {
     alignSelf: "flex-start",

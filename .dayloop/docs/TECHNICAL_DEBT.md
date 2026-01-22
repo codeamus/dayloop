@@ -88,18 +88,13 @@ CREATE INDEX idx_habit_logs_date ON habit_logs(date);
 
 ---
 
-### 5. Feature Flags No Implementados
+### 5. Feature Flags
 
 **Ubicación:** `src/core/features/features.ts`
 
-**Problema:** Solo hay un feature flag (`calendarSync`) con un comentario sobre premium, pero no hay sistema de suscripción implementado.
+**Estado:** Feature flags disponibles para habilitar/deshabilitar funcionalidades sin necesidad de suscripciones.
 
-**Recomendación:**
-- Implementar servicio de suscripción cuando sea necesario
-- Crear `src/core/subscription/subscriptionService.ts`
-- Actualizar `features.ts` para usar el servicio
-
-**Prioridad:** Baja (funcionalidad futura)
+**Nota:** La aplicación es 100% gratuita, los feature flags solo controlan disponibilidad técnica de features.
 
 ---
 

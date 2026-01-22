@@ -8,4 +8,9 @@ export interface HabitLogRepository {
   toggle(habitId: HabitId, date: string): Promise<void>;
   getLogsForHabitSince(habitId: HabitId, fromDate: string): Promise<HabitLog[]>;
   upsertLog(habitId: HabitId, date: string, done: boolean): Promise<void>;
+  /**
+   * Obtiene la fecha del primer registro (MIN(date)) en habit_logs.
+   * Retorna null si no hay registros.
+   */
+  getEarliestLogDate(): Promise<string | null>;
 }

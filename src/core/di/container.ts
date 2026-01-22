@@ -5,6 +5,7 @@ import { SqliteHabitRepository } from "@/data/sqlite/SqliteHabitRepository";
 import { CreateHabit } from "@/domain/usecases/CreateHabit";
 import { DeleteHabit } from "@/domain/usecases/DeleteHabit";
 import { GetAllHabits } from "@/domain/usecases/GetAllHabits";
+import { GetFullHistory } from "@/domain/usecases/GetFullHistory";
 import { GetHabitMonthlyStats } from "@/domain/usecases/GetHabitMonthlyStats";
 import { GetHabitStreaks } from "@/domain/usecases/GetHabitStreaks";
 import { GetTodayHabits } from "@/domain/usecases/GetTodayHabits";
@@ -70,6 +71,10 @@ class Container {
     this.habitLogRepository
   );
   getHabitMonthlyStats = new GetHabitMonthlyStats(
+    this.habitRepository,
+    this.habitLogRepository
+  );
+  getFullHistory = new GetFullHistory(
     this.habitRepository,
     this.habitLogRepository
   );

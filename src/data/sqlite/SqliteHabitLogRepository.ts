@@ -120,6 +120,17 @@ export class SqliteHabitLogRepository implements HabitLogRepository {
   }
 
   /**
+   * Obtiene la fecha del primer registro (MIN(date)) en habit_logs.
+   * Retorna null si no hay registros.
+   */
+  async getEarliestLogDate(): Promise<string | null> {
+    const row = db.getFirstSync<{ min_date: string | null }>(
+      `SELECT MIN(date) as min_date FROM habit_logs`
+    );
+    return row?.min_date ?? null;
+  }
+
+  /**
    * Toggle legacy (lo mantengo intacto)
    * - Si no existe, inserta done=1
    * - Si existe, invierte done
