@@ -2,7 +2,7 @@
   "expo": {
     "name": "Dayloop",
     "slug": "dayloop",
-    "version": "1.0.7",
+    "version": "1.1.0",
     "updates": {
       "fallbackToCacheTimeout": 0
     },
@@ -29,10 +29,10 @@
         "light": "./assets/icons/ios-light.png",
         "tinted": "./assets/icons/ios-tinted.png"
       },
-      "buildNumber": "1"
+      "buildNumber": "110"
     },
     "android": {
-      "versionCode": 8,
+      "versionCode": 110,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icons/adaptive-icon.png",
         "monochromeImage": "./assets/icons/adaptive-icon.png",
