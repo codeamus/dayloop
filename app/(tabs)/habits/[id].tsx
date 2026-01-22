@@ -118,6 +118,9 @@ export default function EditHabitScreen() {
   const [reminderOffsetMinutes, setReminderOffsetMinutes] = useState<
     number | null
   >(0);
+  
+  // Guardar si el hábito original tenía reminderOffsetMinutes para mostrar el selector
+  const [hasOriginalReminderOffset, setHasOriginalReminderOffset] = useState(false);
 
   // ✅ Múltiples horarios de recordatorio
   const [reminderTimes, setReminderTimes] = useState<string[]>([]);
@@ -156,6 +159,7 @@ export default function EditHabitScreen() {
 
   const { toggle: toggleForDate } = useToggleHabitForDate(habitId);
   const { show } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (!habitId) return;
@@ -211,16 +215,18 @@ export default function EditHabitScreen() {
       setTimeBlocks(loadedTimeBlocks);
     }
 
-    // ✅ reminder init (aquí sí existe habit) - solo si no hay reminderTimes
-    if (!habit.reminderTimes || habit.reminderTimes.length === 0) {
-      setReminderOffsetMinutes(
-        (habit as any).reminderOffsetMinutes === undefined
-          ? 0
-          : ((habit as any).reminderOffsetMinutes as number | null)
-      );
-    } else {
-      setReminderOffsetMinutes(null);
-    }
+    // ✅ reminder init - cargar reminderOffsetMinutes siempre, incluso si hay reminderTimes
+    // Esto permite que el usuario vea y edite el recordatorio si existe en la BD
+    const originalReminderOffset = habit.reminderOffsetMinutes;
+    // Considerar que tiene reminderOffset si es un número (incluyendo 0) o si es null explícitamente guardado
+    // Si es null, también puede ser que esté guardado como null, así que verificamos si está definido
+    const hasOriginal = originalReminderOffset !== undefined;
+    setHasOriginalReminderOffset(hasOriginal);
+    setReminderOffsetMinutes(
+      originalReminderOffset === undefined
+        ? 0
+        : (originalReminderOffset as number | null)
+    );
 
     // schedule init
     if (habit.schedule.type === "daily") {
@@ -398,42 +404,50 @@ export default function EditHabitScreen() {
         ? timeBlocks[0]
         : { startTime: startTime, endTime: endTime };
 
-    const updated: Habit = {
-      ...habit,
-      name: trimmed,
-      schedule,
-      color,
-      icon,
-      mode,
-      startTime: firstBlock.startTime,
-      endTime: firstBlock.endTime,
-      time: firstBlock.startTime,
-      timeOfDay,
-      reminderOffsetMinutes:
-        mode === "puntual" && reminderTimes.length > 0
-          ? null
-          : reminderOffsetMinutes,
-      reminderTimes:
-        mode === "puntual" && reminderTimes.length > 0
-          ? reminderTimes
-          : undefined,
-      timeBlocks:
-        mode === "bloque" && timeBlocks.length > 0 ? timeBlocks : undefined,
-      targetRepeats: autoTargetRepeats,
-    };
+    setIsSaving(true);
 
-    // 1) Persistir cambios del hábito
-    await container.updateHabit.execute(updated);
+    try {
+      const updated: Habit = {
+        ...habit,
+        name: trimmed,
+        schedule,
+        color,
+        icon,
+        mode,
+        startTime: firstBlock.startTime,
+        endTime: firstBlock.endTime,
+        time: firstBlock.startTime,
+        timeOfDay,
+        reminderOffsetMinutes:
+          mode === "puntual" && reminderTimes.length > 0
+            ? null
+            : reminderOffsetMinutes,
+        reminderTimes:
+          mode === "puntual" && reminderTimes.length > 0
+            ? reminderTimes
+            : undefined, // Limpiar si no es puntual o no tiene reminderTimes
+        timeBlocks:
+          mode === "bloque" && timeBlocks.length > 0 
+            ? timeBlocks 
+            : undefined, // Limpiar si no es bloque o no tiene timeBlocks
+        targetRepeats: autoTargetRepeats,
+      };
 
-    // 2) ✅ Reprogramar notificaciones usando el scheduler (respeta weekly/monthly y evita duplicados)
-    if (reminderOffsetMinutes === null) {
-      await cancelHabitNotificationsByHabitId(updated.id);
-    } else {
-      await rescheduleHabitNotificationsForHabit(updated, { horizonDays: 30 });
+      // 1) Persistir cambios del hábito
+      await container.updateHabit.execute(updated);
+
+      // 2) ✅ Reprogramar notificaciones usando el scheduler (respeta weekly/monthly y evita duplicados)
+      if (reminderOffsetMinutes === null) {
+        await cancelHabitNotificationsByHabitId(updated.id);
+      } else {
+        await rescheduleHabitNotificationsForHabit(updated, { horizonDays: 30 });
+      }
+
+      await refreshMonthly();
+      router.back();
+    } finally {
+      setIsSaving(false);
     }
-
-    await refreshMonthly();
-    router.back();
   }
 
   async function handleDelete() {
@@ -792,8 +806,7 @@ export default function EditHabitScreen() {
             <Pressable
               onPress={() => {
                 setMode("bloque");
-                // Limpiar reminderTimes al cambiar a modo bloque
-                setReminderTimes([]);
+                // NO limpiar reminderTimes aquí - solo se limpian al guardar
               }}
               style={[
                 styles.segment,
@@ -813,8 +826,7 @@ export default function EditHabitScreen() {
             <Pressable
               onPress={() => {
                 setMode("puntual");
-                // Limpiar timeBlocks al cambiar a modo puntual
-                setTimeBlocks([]);
+                // NO limpiar timeBlocks aquí - solo se limpian al guardar
               }}
               style={[
                 styles.segment,
@@ -845,8 +857,7 @@ export default function EditHabitScreen() {
               blocks={timeBlocks}
               onChange={(newBlocks) => {
                 setTimeBlocks(newBlocks);
-                // Limpiar reminderTimes al cambiar a modo bloque
-                setReminderTimes([]);
+                // NO limpiar reminderTimes aquí - solo se limpian al guardar
                 // Sincronizar targetRepeats automáticamente
                 if (newBlocks.length > 0) {
                   setTargetRepeats(newBlocks.length);
@@ -868,12 +879,15 @@ export default function EditHabitScreen() {
               times={reminderTimes}
               onChange={(newTimes) => {
                 setReminderTimes(newTimes);
-                // Limpiar timeBlocks al cambiar a modo puntual
-                setTimeBlocks([]);
+                // NO limpiar timeBlocks aquí - solo se limpian al guardar
                 // Sincronizar targetRepeats automáticamente
                 if (newTimes.length > 0) {
                   setTargetRepeats(newTimes.length);
-                  setReminderOffsetMinutes(null);
+                  // Solo establecer reminderOffsetMinutes a null si el usuario agrega reminderTimes
+                  // pero mantener el valor si ya existía
+                  if (!hasOriginalReminderOffset) {
+                    setReminderOffsetMinutes(null);
+                  }
                 }
               }}
               onSyncTargetRepeats={(count) => {
@@ -886,12 +900,15 @@ export default function EditHabitScreen() {
         )}
 
         {/* Recordatorio (legacy - mantener para compatibilidad) */}
-        {reminderTimes.length === 0 && (
+        {/* Mostrar siempre para modo "bloque", o para modo "puntual" si no hay reminderTimes, 
+            o si el hábito tiene reminderOffsetMinutes guardado (para mostrar valor existente) */}
+        {(mode === "bloque" || reminderTimes.length === 0 || hasOriginalReminderOffset) && (
           <View style={styles.field}>
             <Text style={styles.label}>Recordatorio (opcional)</Text>
             <Text style={styles.helper}>
-              Si no usas horarios personalizados arriba, puedes usar esta
-              opción para un recordatorio relativo al inicio del hábito.
+              {mode === "bloque"
+                ? "Recibe una notificación antes de que comience el bloque de tiempo."
+                : "Recibe una notificación antes de cada horario puntual. Útil si no configuraste horarios personalizados arriba."}
             </Text>
             <View
               style={{
@@ -937,8 +954,19 @@ export default function EditHabitScreen() {
           </View>
         )}
 
-        <Pressable onPress={handleSave} style={styles.btn}>
-          <Text style={styles.btnText}>Guardar cambios</Text>
+        <Pressable 
+          onPress={handleSave} 
+          style={[styles.btn, isSaving && { opacity: 0.6 }]}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.primaryText} style={{ marginRight: 4 }} />
+              <Text style={styles.btnText}>Guardando...</Text>
+            </View>
+          ) : (
+            <Text style={styles.btnText}>Guardar cambios</Text>
+          )}
         </Pressable>
       </ScrollView>
     </Screen>
@@ -1259,6 +1287,12 @@ const styles = StyleSheet.create({
     color: colors.primaryText,
     fontWeight: "900",
     fontSize: 15,
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
   },
 
   streakPillRow: { flexDirection: "row", alignItems: "center", gap: 6 },

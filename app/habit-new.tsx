@@ -498,8 +498,9 @@ export default function HabitNewScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>Recordatorio (opcional)</Text>
           <Text style={styles.helper}>
-            Si no usas horarios personalizados arriba, puedes usar esta opción
-            para un recordatorio relativo al inicio del hábito.
+            {mode === "bloque"
+              ? "Recibe una notificación antes de que comience el bloque de tiempo."
+              : "Recibe una notificación antes de cada horario puntual. Útil si no configuraste horarios personalizados arriba."}
           </Text>
           <View style={styles.row}>
             {REMINDER_OPTIONS.map((opt) => {
