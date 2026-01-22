@@ -1,0 +1,25 @@
+# Dayloop AI Manifest (Instrucciones Permanentes)
+
+Siempre que te pida desarrollar una funcionalidad, debes seguir este flujo AUTOMÁTICAMENTE sin que yo te lo repita:
+
+1. **Fase de Análisis**: Consulta `.dayloop/docs/` (`ARCHITECTURE_MAP.md`, `BUSINESS_LOGIC.md`) antes de proponer nada.
+2. **Planificación**: Presenta un plan de 3 a 7 puntos y la lista de archivos a modificar.
+3. **Reglas de Código**:
+   - Lógica de negocio SIEMPRE en `src/domain/usecases`.
+   - Persistencia SIEMPRE en `src/data/sqlite`.
+   - Prohibido usar UTC/ISOString para días; usar siempre local-time (YYYY-MM-DD).
+   - Mantener la jerarquía de capas (Domain no conoce a Data ni a UI).
+4. **Validación**: Al terminar, clasifica el cambio como "OTA (JS/UI)" o "Requiere Build Nativo".
+
+## Reglas de Git y Commits
+- Usa **Conventional Commits** con emojis.
+- Formato: `<emoji> <tipo>(<ámbito>): <descripción>`
+- Emojis sugeridos:
+  - ✨ `feat`: Nueva funcionalidad.
+  - 🐛 `fix`: Corrección de errores (especialmente en cálculos/fechas).
+  - ⚡️ `zap`: Mejora de performance.
+  - ♻️ `refactor`: Limpieza de código sin cambiar lógica.
+  - 🏗️ `chore`: Cambios en base de datos o configuración.
+  - 📝 `docs`: Cambios en archivos de reglas (.md) o documentación.
+
+Si mi petición rompe alguna regla de negocio o arquitectura, bloquéala y propón la alternativa correcta.
