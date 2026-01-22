@@ -3,7 +3,7 @@ import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 export function initDatabase() {
   db.execSync(`
@@ -41,7 +41,11 @@ export function initDatabase() {
       target_repeats INTEGER,
 
       -- ✅ Múltiples horarios de recordatorio
-      reminder_times TEXT
+      reminder_times TEXT,
+
+      -- ✅ Modo y bloques de tiempo
+      mode TEXT,
+      time_blocks TEXT
     );
 
     CREATE TABLE IF NOT EXISTS habit_logs (
@@ -85,10 +89,16 @@ function migrateIfNeeded() {
   // Verificar si las columnas de V7 existen
   const needsV7Migration = !columnExistsInTable("habits", "reminder_times");
 
+  // Verificar si las columnas de V8 existen
+  const needsV8Migration =
+    !columnExistsInTable("habits", "mode") ||
+    !columnExistsInTable("habits", "time_blocks");
+
   if (
     user_version >= SCHEMA_VERSION &&
     !needsV6Migration &&
-    !needsV7Migration
+    !needsV7Migration &&
+    !needsV8Migration
   )
     return;
 
@@ -101,6 +111,7 @@ function migrateIfNeeded() {
     if (user_version < 5) migrateToV5();
     if (user_version < 6 || needsV6Migration) migrateToV6();
     if (user_version < 7 || needsV7Migration) migrateToV7();
+    if (user_version < 8) migrateToV8();
 
     db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     db.execSync(`COMMIT;`);
@@ -281,6 +292,52 @@ function migrateToV7() {
     }
   } catch (e) {
     console.warn("[DB] Failed to migrate reminder_times:", e);
+  }
+}
+
+// ✅ V8 (modo y bloques de tiempo)
+function migrateToV8() {
+  // Agregar columnas mode y time_blocks
+  safeAddColumn("habits", "mode", "TEXT");
+  safeAddColumn("habits", "time_blocks", "TEXT");
+
+  // Migrar datos existentes: convertir startTime/endTime a timeBlocks
+  try {
+    const habits = db.getAllSync<{
+      id: string;
+      start_time: string | null;
+      end_time: string | null;
+    }>(`
+      SELECT id, start_time, end_time
+      FROM habits
+      WHERE mode IS NULL
+        AND (start_time IS NOT NULL OR end_time IS NOT NULL)
+    `);
+
+    for (const habit of habits) {
+      const startTime = habit.start_time ?? "08:00";
+      const endTime = habit.end_time ?? "08:30";
+
+      // Crear un bloque de tiempo desde los datos existentes
+      const timeBlocks: Array<{ startTime: string; endTime: string }> = [
+        { startTime, endTime },
+      ];
+      const timeBlocksJson = JSON.stringify(timeBlocks);
+
+      db.runSync(
+        `UPDATE habits SET mode = ?, time_blocks = ? WHERE id = ?`,
+        ["bloque", timeBlocksJson, habit.id]
+      );
+    }
+
+    // Para hábitos sin start_time/end_time, establecer modo "puntual"
+    db.execSync(`
+      UPDATE habits
+      SET mode = 'puntual'
+      WHERE mode IS NULL
+    `);
+  } catch (e) {
+    console.warn("[DB] Failed to migrate mode/time_blocks:", e);
   }
 }
 

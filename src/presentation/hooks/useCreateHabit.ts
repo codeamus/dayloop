@@ -8,8 +8,10 @@ type CreateHabitInput = {
   icon: string;
   color: string;
   type: "daily" | "weekly" | "monthly";
+  mode?: "puntual" | "bloque";
   startTime?: string;
   endTime?: string;
+  timeBlocks?: Array<{ startTime: string; endTime: string }>;
   weeklyDays?: number[];
   monthDays?: number[];
   reminderOffsetMinutes?: number | null;
@@ -28,8 +30,10 @@ export function useCreateHabit() {
       icon: input.icon,
       color: input.color,
       type: input.type,
+      mode: input.mode,
       startTime: input.startTime,
       endTime: input.endTime,
+      timeBlocks: input.timeBlocks,
       weeklyDays: input.weeklyDays,
       monthDays: input.monthDays,
       reminderOffsetMinutes: input.reminderOffsetMinutes,

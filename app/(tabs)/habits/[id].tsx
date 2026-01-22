@@ -10,7 +10,10 @@ import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
 import MonthlyCalendar from "@/presentation/components/MonthlyCalendar";
 import { ReminderTimesSelector } from "@/presentation/components/ReminderTimesSelector";
 import { Screen } from "@/presentation/components/Screen";
-import { TargetSelector } from "@/presentation/components/TargetSelector";
+import {
+  TimeBlocksSelector,
+  type TimeBlock,
+} from "@/presentation/components/TimeBlocksSelector";
 import { useToast } from "@/presentation/components/ToastProvider";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitMonthlyStats } from "@/presentation/hooks/useHabitMonthlyStats";
@@ -122,14 +125,20 @@ export default function EditHabitScreen() {
   const [name, setName] = useState("");
   const [scheduleType, setScheduleType] = useState<ScheduleType>("daily");
 
+  // ✅ Modo del hábito (Puntual o Bloque)
+  const [mode, setMode] = useState<"puntual" | "bloque">("bloque");
+
   const [selectedWeekDays, setSelectedWeekDays] = useState<number[]>([]);
   const [selectedMonthDays, setSelectedMonthDays] = useState<number[]>([]);
 
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>("📚");
 
-  // ✅ Objetivo diario (repeticiones)
+  // ✅ Objetivo diario (repeticiones) - se sincroniza automáticamente
   const [targetRepeats, setTargetRepeats] = useState<number>(1);
+
+  // ✅ Bloques de tiempo (solo para modo "bloque")
+  const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
 
   // bloque horario
   const [startTime, setStartTime] = useState<string>("08:00");
@@ -160,11 +169,47 @@ export default function EditHabitScreen() {
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || "📚");
 
-    // ✅ objetivo diario init
+    // ✅ Modo del hábito init - detectar automáticamente si tiene reminderTimes o timeBlocks
+    // Prioridad: 1) detección por datos (reminderTimes/timeBlocks), 2) modo explícito válido, 3) default
+    const hasReminderTimes = Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0;
+    const hasTimeBlocks = Array.isArray(habit.timeBlocks) && habit.timeBlocks.length > 0;
+    
+    // Determinar el modo final
+    let finalMode: "puntual" | "bloque";
+    if (hasReminderTimes) {
+      // Si tiene reminderTimes, es definitivamente puntual (incluso si mode dice "bloque")
+      finalMode = "puntual";
+    } else if (hasTimeBlocks) {
+      // Si tiene timeBlocks, es definitivamente bloque
+      finalMode = "bloque";
+    } else if (habit.mode === "puntual" || habit.mode === "bloque") {
+      // Si no tiene datos pero tiene modo explícito, usar ese
+      finalMode = habit.mode;
+    } else {
+      // Default: si no tiene ninguno, usar "bloque" para compatibilidad
+      finalMode = "bloque";
+    }
+    setMode(finalMode);
+
+    // ✅ objetivo diario init (se sincronizará automáticamente)
     setTargetRepeats(habit.targetRepeats ?? 1);
 
     // ✅ múltiples horarios de recordatorio init
     setReminderTimes(habit.reminderTimes ?? []);
+
+    // ✅ bloques de tiempo init - cargar siempre, incluso si está vacío
+    const loadedTimeBlocks = habit.timeBlocks ?? [];
+    
+    // Si el hábito es modo "bloque" pero no tiene timeBlocks, y tiene startTime/endTime legacy,
+    // convertir a un bloque de tiempo para que sea visible y editable
+    if (finalMode === "bloque" 
+        && loadedTimeBlocks.length === 0 
+        && habit.startTime 
+        && habit.endTime) {
+      setTimeBlocks([{ startTime: habit.startTime, endTime: habit.endTime }]);
+    } else {
+      setTimeBlocks(loadedTimeBlocks);
+    }
 
     // ✅ reminder init (aquí sí existe habit) - solo si no hay reminderTimes
     if (!habit.reminderTimes || habit.reminderTimes.length === 0) {
@@ -322,19 +367,59 @@ export default function EditHabitScreen() {
 
     const timeOfDay = getTimeOfDayFromHour(startTime);
 
+    // Validar según modo
+    if (mode === "bloque" && timeBlocks.length === 0) {
+      Alert.alert(
+        "Agrega bloques",
+        "Para un hábito de bloque, debes agregar al menos un bloque de tiempo."
+      );
+      return;
+    }
+
+    if (mode === "puntual" && reminderTimes.length === 0) {
+      Alert.alert(
+        "Agrega horarios",
+        "Para un hábito puntual, debes agregar al menos un horario de recordatorio."
+      );
+      return;
+    }
+
+    // Sincronizar targetRepeats automáticamente
+    const autoTargetRepeats =
+      mode === "bloque" && timeBlocks.length > 0
+        ? timeBlocks.length
+        : mode === "puntual" && reminderTimes.length > 0
+        ? reminderTimes.length
+        : targetRepeats;
+
+    // Usar el primer bloque para startTime/endTime (compatibilidad legacy)
+    const firstBlock =
+      mode === "bloque" && timeBlocks.length > 0
+        ? timeBlocks[0]
+        : { startTime: startTime, endTime: endTime };
+
     const updated: Habit = {
       ...habit,
       name: trimmed,
       schedule,
       color,
       icon,
-      startTime,
-      endTime,
-      time: startTime,
+      mode,
+      startTime: firstBlock.startTime,
+      endTime: firstBlock.endTime,
+      time: firstBlock.startTime,
       timeOfDay,
-      reminderOffsetMinutes: reminderTimes.length > 0 ? null : reminderOffsetMinutes,
-      reminderTimes: reminderTimes.length > 0 ? reminderTimes : undefined,
-      targetRepeats,
+      reminderOffsetMinutes:
+        mode === "puntual" && reminderTimes.length > 0
+          ? null
+          : reminderOffsetMinutes,
+      reminderTimes:
+        mode === "puntual" && reminderTimes.length > 0
+          ? reminderTimes
+          : undefined,
+      timeBlocks:
+        mode === "bloque" && timeBlocks.length > 0 ? timeBlocks : undefined,
+      targetRepeats: autoTargetRepeats,
     };
 
     // 1) Persistir cambios del hábito
@@ -700,88 +785,105 @@ export default function EditHabitScreen() {
           </View>
         )}
 
-        {/* Horario */}
-        <Text style={styles.label}>Horario</Text>
-        <View style={{ flexDirection: "row", gap: 10, flexWrap: "wrap" }}>
-          <Pressable
-            style={styles.timeButton}
-            onPress={() => openPickerFor("start")}
-          >
-            <Text style={styles.timeButtonText}>{startTime}</Text>
-            <View style={styles.timePill}>
-              <Text style={styles.timePillText}>Inicio</Text>
-            </View>
-          </Pressable>
+        {/* Modo del hábito */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Modo</Text>
+          <View style={styles.segmentContainer}>
+            <Pressable
+              onPress={() => {
+                setMode("bloque");
+                // Limpiar reminderTimes al cambiar a modo bloque
+                setReminderTimes([]);
+              }}
+              style={[
+                styles.segment,
+                mode === "bloque" && styles.segmentActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  mode === "bloque" && styles.segmentTextActive,
+                ]}
+              >
+                Bloque de tiempo
+              </Text>
+            </Pressable>
 
-          <Pressable
-            style={styles.timeButton}
-            onPress={() => openPickerFor("end")}
-          >
-            <Text style={styles.timeButtonText}>{endTime}</Text>
-            <View style={styles.timePill}>
-              <Text style={styles.timePillText}>Fin</Text>
-            </View>
-          </Pressable>
-        </View>
-
-        <View style={styles.timeHintRow}>
-          <Feather name="info" size={16} color={colors.primary} />
-          <Text style={styles.timeHintText}>
-            Inicio = cuando comienza tu hábito.{"\n"}Fin = cuando termina.
+            <Pressable
+              onPress={() => {
+                setMode("puntual");
+                // Limpiar timeBlocks al cambiar a modo puntual
+                setTimeBlocks([]);
+              }}
+              style={[
+                styles.segment,
+                mode === "puntual" && styles.segmentActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  mode === "puntual" && styles.segmentTextActive,
+                ]}
+              >
+                Puntual
+              </Text>
+            </Pressable>
+          </View>
+          <Text style={styles.helper}>
+            {mode === "bloque"
+              ? "Define bloques de tiempo (ej: 08:00-08:30, 21:00-21:30)"
+              : "Define horarios puntuales de recordatorio (ej: 9:00, 10:12, 12:22)"}
           </Text>
         </View>
 
-        {showTimePicker && (
-          <View style={styles.timePickerContainer}>
-            <DateTimePicker
-              value={pickerDate}
-              mode="time"
-              is24Hour
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={handleTimeChange}
-              themeVariant="dark"
+        {/* Bloques de tiempo (solo para modo "bloque") */}
+        {mode === "bloque" && (
+          <View style={styles.field}>
+            <TimeBlocksSelector
+              blocks={timeBlocks}
+              onChange={(newBlocks) => {
+                setTimeBlocks(newBlocks);
+                // Limpiar reminderTimes al cambiar a modo bloque
+                setReminderTimes([]);
+                // Sincronizar targetRepeats automáticamente
+                if (newBlocks.length > 0) {
+                  setTargetRepeats(newBlocks.length);
+                }
+              }}
+              onSyncTargetRepeats={(count) => {
+                if (count > 0) {
+                  setTargetRepeats(count);
+                }
+              }}
             />
-
-            {Platform.OS === "ios" && (
-              <Pressable
-                style={styles.timeDoneButton}
-                onPress={() => setShowTimePicker(false)}
-              >
-                <Text style={styles.timeDoneText}>Listo</Text>
-              </Pressable>
-            )}
           </View>
         )}
 
-        {/* Objetivo diario */}
-        <View style={styles.field}>
-          <TargetSelector
-            value={targetRepeats}
-            onChange={setTargetRepeats}
-            min={1}
-            max={20}
-          />
-        </View>
-
-        {/* Horarios de recordatorio personalizados */}
-        <View style={styles.field}>
-          <ReminderTimesSelector
-            times={reminderTimes}
-            onChange={(newTimes) => {
-              setReminderTimes(newTimes);
-              // Si se agregan horarios personalizados, desactivar reminderOffsetMinutes
-              if (newTimes.length > 0) {
-                setReminderOffsetMinutes(null);
-              }
-            }}
-            onSyncTargetRepeats={(count) => {
-              // Opcional: sincronizar targetRepeats con cantidad de horarios
-              if (count > 0) {
-                setTargetRepeats(count);
-              }
-            }}
-          />
-        </View>
+        {/* Horarios de recordatorio personalizados (solo para modo "puntual") */}
+        {mode === "puntual" && (
+          <View style={styles.field}>
+            <ReminderTimesSelector
+              times={reminderTimes}
+              onChange={(newTimes) => {
+                setReminderTimes(newTimes);
+                // Limpiar timeBlocks al cambiar a modo puntual
+                setTimeBlocks([]);
+                // Sincronizar targetRepeats automáticamente
+                if (newTimes.length > 0) {
+                  setTargetRepeats(newTimes.length);
+                  setReminderOffsetMinutes(null);
+                }
+              }}
+              onSyncTargetRepeats={(count) => {
+                if (count > 0) {
+                  setTargetRepeats(count);
+                }
+              }}
+            />
+          </View>
+        )}
 
         {/* Recordatorio (legacy - mantener para compatibilidad) */}
         {reminderTimes.length === 0 && (

@@ -33,10 +33,14 @@ export type TodayHabitVM = {
   icon: string;
   scheduleType: FrequencyType;
   timeOfDay?: TimeOfDay;
+  mode?: "puntual" | "bloque";
+  progress?: number;
+  targetRepeats?: number;
 
   startTime?: string | null;
   endTime?: string | null;
   time?: string | null; // legacy
+  timeBlocks?: Array<{ startTime: string; endTime: string }> | null;
 };
 
 function getScheduleType(habit: any): FrequencyType {
@@ -83,10 +87,12 @@ export function useTodayHabits() {
           targetRepeats: habit.targetRepeats ?? 1,
           scheduleType: getScheduleType(habit),
           timeOfDay: habit.timeOfDay,
+          mode: habit.mode ?? "bloque",
 
           startTime: habit.startTime ?? null,
           endTime: habit.endTime ?? null,
           time: habit.time ?? null,
+          timeBlocks: habit.timeBlocks ?? null,
         };
       });
 
@@ -114,8 +120,25 @@ export function useTodayHabits() {
 
   async function toggle(id: string) {
     const dateStr = todayStr();
-    // Usar incrementHabitProgress para soportar múltiples repeticiones
-    await container.incrementHabitProgress.execute({ habitId: id, date: dateStr });
+    const habit = habits.find((h) => h.id === id);
+    
+    if (!habit) return;
+
+    // Para hábitos puntuales completados, volver a pendientes (toggle)
+    if (habit.mode === "puntual" && habit.done) {
+      // Usar toggle tradicional para volver a pendientes
+      await container.toggleHabitForDate.execute({
+        habitId: id,
+        date: dateStr,
+      });
+    } else {
+      // Para hábitos de bloque o puntuales no completados, incrementar progreso
+      await container.incrementHabitProgress.execute({
+        habitId: id,
+        date: dateStr,
+      });
+    }
+    
     await load();
   }
 

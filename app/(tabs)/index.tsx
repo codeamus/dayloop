@@ -1,5 +1,6 @@
 // app/(tabs)/index.tsx
 import { container } from "@/core/di/container";
+import { rescheduleHabitNotificationsForHabit } from "@/core/notifications/notifications";
 import { Screen } from "@/presentation/components/Screen";
 import { StatusPill } from "@/presentation/components/StatusPill";
 import { useNotificationPermission } from "@/presentation/hooks/useNotificationPermission";
@@ -31,8 +32,20 @@ function hhmmToMinutes(hhmm?: string): number {
 }
 
 function formatBlock(h: any): string | null {
-  const start = h?.startTime ?? h?.time ?? null;
-  const end = h?.endTime ?? (start ? addMinutesHHmm(start, 30) : null);
+  // Si es modo puntual, no mostrar bloque de tiempo
+  if (h?.mode === "puntual") {
+    return null;
+  }
+
+  // Si tiene timeBlocks, mostrar el primer bloque
+  if (Array.isArray(h?.timeBlocks) && h.timeBlocks.length > 0) {
+    const firstBlock = h.timeBlocks[0];
+    return `${firstBlock.startTime}–${firstBlock.endTime}`;
+  }
+
+  // Legacy: usar startTime/endTime
+  const start = h?.startTime ?? h?.time ?? undefined;
+  const end = h?.endTime ?? (start ? addMinutesHHmm(start, 30) : undefined);
 
   if (!start && !end) return null;
   if (start && end) return `${start}–${end}`;
@@ -52,7 +65,7 @@ export default function TodayScreen() {
   const { loading, habits, toggle } = useTodayHabits();
   const [timeTab, setTimeTab] = useState<TimeTab>("all");
 
-  const { isGranted, request } = useNotificationPermission();
+  const { isGranted, requestPermission } = useNotificationPermission();
   const shouldShowNotificationPrompt = !isGranted && habits.length > 0;
 
   // Re-agenda weekly/monthly Android al entrar al Home
@@ -61,7 +74,12 @@ export default function TodayScreen() {
       (async () => {
         try {
           const all = await container.getAllHabits.execute();
-          await container.notificationScheduler.rescheduleNextForAndroid(all);
+          // Re-agendar notificaciones para todos los hábitos
+          for (const habit of all) {
+            if (habit.reminderOffsetMinutes !== null || (habit.reminderTimes && habit.reminderTimes.length > 0)) {
+              await rescheduleHabitNotificationsForHabit(habit, { horizonDays: 30 });
+            }
+          }
         } catch {
           // ignore
         }
@@ -88,8 +106,8 @@ export default function TodayScreen() {
     });
 
     return [...list].sort((a, b) => {
-      const aMin = hhmmToMinutes(a.startTime ?? a.time);
-      const bMin = hhmmToMinutes(b.startTime ?? b.time);
+      const aMin = hhmmToMinutes(a.startTime ?? a.time ?? undefined);
+      const bMin = hhmmToMinutes(b.startTime ?? b.time ?? undefined);
       return aMin - bMin;
     });
   }, [habits, timeTab]);
@@ -205,7 +223,7 @@ export default function TodayScreen() {
             </Text>
           </View>
 
-          <Pressable onPress={request} style={styles.notificationButton}>
+          <Pressable onPress={requestPermission} style={styles.notificationButton}>
             <Text style={styles.notificationButtonText}>Activar</Text>
           </Pressable>
         </View>
@@ -350,9 +368,9 @@ export default function TodayScreen() {
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={styles.habitNameRow}>
                     <Text style={styles.habitText}>{h.name}</Text>
-                    {h.targetRepeats > 1 && (
+                    {(h.targetRepeats ?? 1) > 1 && (
                       <Text style={styles.progressIndicator}>
-                        {h.progress}/{h.targetRepeats}
+                        {h.progress ?? 0}/{h.targetRepeats ?? 1}
                       </Text>
                     )}
                   </View>
@@ -366,8 +384,8 @@ export default function TodayScreen() {
 
                 <View style={styles.habitRight}>
                   <Text style={styles.habitHint}>
-                    {h.targetRepeats > 1 && h.progress < h.targetRepeats
-                      ? `${h.progress}/${h.targetRepeats}`
+                    {(h.targetRepeats ?? 1) > 1 && (h.progress ?? 0) < (h.targetRepeats ?? 1)
+                      ? `${h.progress ?? 0}/${h.targetRepeats ?? 1}`
                       : "Tocar"}
                   </Text>
                 </View>
@@ -402,9 +420,9 @@ export default function TodayScreen() {
                     <Text style={[styles.habitText, styles.habitTextDone]}>
                       {h.name}
                     </Text>
-                    {h.targetRepeats > 1 && (
+                    {(h.targetRepeats ?? 1) > 1 && (
                       <Text style={[styles.progressIndicator, styles.progressIndicatorDone]}>
-                        {h.progress}/{h.targetRepeats}
+                        {h.progress ?? 0}/{h.targetRepeats ?? 1}
                       </Text>
                     )}
                   </View>
@@ -422,8 +440,8 @@ export default function TodayScreen() {
 
                 <View style={styles.habitRight}>
                   <Text style={[styles.habitHint, styles.habitHintDone]}>
-                    {h.targetRepeats > 1
-                      ? `${h.progress}/${h.targetRepeats}`
+                    {(h.targetRepeats ?? 1) > 1
+                      ? `${h.progress ?? 0}/${h.targetRepeats ?? 1}`
                       : "Listo"}
                   </Text>
                 </View>

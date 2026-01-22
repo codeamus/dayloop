@@ -71,8 +71,10 @@ export class CreateHabit {
     icon: string;
     color: string;
     type: "daily" | "weekly" | "monthly";
+    mode?: unknown;
     startTime?: unknown;
     endTime?: unknown;
+    timeBlocks?: unknown;
     weeklyDays?: unknown;
     monthDays?: unknown;
     reminderOffsetMinutes?: unknown;
@@ -87,8 +89,37 @@ export class CreateHabit {
       const icon = safeString(input.icon, "🔥");
       const color = safeString(input.color, "#e6bc01");
 
-      const startTime = safeHHmm(input.startTime, "08:00");
-      const endTime = safeHHmm(input.endTime, "08:30");
+      // Determinar modo
+      const mode =
+        input.mode === "puntual" || input.mode === "bloque"
+          ? input.mode
+          : "bloque";
+
+      // Parsear timeBlocks (solo para modo "bloque")
+      let timeBlocks: Array<{ startTime: string; endTime: string }> | undefined;
+      if (mode === "bloque" && Array.isArray(input.timeBlocks)) {
+        timeBlocks = input.timeBlocks
+          .filter(
+            (b) =>
+              typeof b === "object" &&
+              b !== null &&
+              typeof (b as any).startTime === "string" &&
+              typeof (b as any).endTime === "string"
+          )
+          .map((b: any) => ({
+            startTime: safeHHmm(b.startTime, "08:00"),
+            endTime: safeHHmm(b.endTime, "08:30"),
+          }));
+      }
+
+      // Para compatibilidad legacy, usar el primer bloque o valores por defecto
+      const firstBlock =
+        timeBlocks && timeBlocks.length > 0
+          ? timeBlocks[0]
+          : { startTime: "08:00", endTime: "08:30" };
+
+      const startTime = safeHHmm(input.startTime, firstBlock.startTime);
+      const endTime = safeHHmm(input.endTime, firstBlock.endTime);
       const timeOfDay = getTimeOfDayFromHour(startTime);
 
       const reminderOffsetMinutes =
@@ -144,10 +175,12 @@ export class CreateHabit {
         icon,
         color,
         schedule,
+        mode,
         startTime,
         endTime,
         time: startTime,
         timeOfDay,
+        timeBlocks,
         reminderOffsetMinutes: Number.isFinite(reminderOffsetMinutes as number)
           ? (reminderOffsetMinutes as number)
           : null,

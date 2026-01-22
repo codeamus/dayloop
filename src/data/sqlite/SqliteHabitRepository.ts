@@ -38,6 +38,10 @@ type HabitRow = {
 
       // ✅ múltiples repeticiones
       target_repeats?: number | null;
+
+  // ✅ Modo y bloques de tiempo
+      mode?: string | null;
+      time_blocks?: string | null;
 };
 
 /**
@@ -148,6 +152,21 @@ function toHabit(row: HabitRow): Habit {
         []
       ).filter((x) => typeof x === "string" && /^\d{2}:\d{2}$/.test(x)),
 
+      // ✅ Modo y bloques de tiempo
+      mode: (row.mode === "puntual" || row.mode === "bloque"
+        ? row.mode
+        : "bloque") as "puntual" | "bloque",
+      timeBlocks: safeJsonParse<Array<{ startTime: string; endTime: string }>>(
+        row.time_blocks ?? "[]",
+        []
+      ).filter(
+        (b) =>
+          typeof b === "object" &&
+          b !== null &&
+          typeof (b as any).startTime === "string" &&
+          typeof (b as any).endTime === "string"
+      ) as Array<{ startTime: string; endTime: string }>,
+
       // ✅ pause
       isPaused,
       pausedAt: row.paused_at ?? null,
@@ -190,6 +209,8 @@ export class SqliteHabitRepository implements HabitRepository {
     // Construir query dinámicamente según columnas disponibles
     const hasTargetRepeats = this.columnExists("habits", "target_repeats");
     const hasReminderTimes = this.columnExists("habits", "reminder_times");
+    const hasMode = this.columnExists("habits", "mode");
+    const hasTimeBlocks = this.columnExists("habits", "time_blocks");
     
     const columns = [
       "id", "name", "color", "icon",
@@ -231,6 +252,16 @@ export class SqliteHabitRepository implements HabitRepository {
     if (hasReminderTimes) {
       columns.push("reminder_times");
       values.push(JSON.stringify(habit.reminderTimes ?? []));
+    }
+
+    if (hasMode) {
+      columns.push("mode");
+      values.push(habit.mode ?? "bloque");
+    }
+
+    if (hasTimeBlocks) {
+      columns.push("time_blocks");
+      values.push(JSON.stringify(habit.timeBlocks ?? []));
     }
 
     const placeholders = values.map(() => "?").join(", ");
@@ -278,6 +309,8 @@ export class SqliteHabitRepository implements HabitRepository {
     // Construir UPDATE dinámicamente según columnas disponibles
     const hasTargetRepeats = this.columnExists("habits", "target_repeats");
     const hasReminderTimes = this.columnExists("habits", "reminder_times");
+    const hasMode = this.columnExists("habits", "mode");
+    const hasTimeBlocks = this.columnExists("habits", "time_blocks");
     
     const setClauses = [
       "name = ?",
@@ -325,6 +358,16 @@ export class SqliteHabitRepository implements HabitRepository {
     if (hasReminderTimes) {
       setClauses.push("reminder_times = ?");
       values.push(JSON.stringify(habit.reminderTimes ?? []));
+    }
+
+    if (hasMode) {
+      setClauses.push("mode = ?");
+      values.push(habit.mode ?? "bloque");
+    }
+
+    if (hasTimeBlocks) {
+      setClauses.push("time_blocks = ?");
+      values.push(JSON.stringify(habit.timeBlocks ?? []));
     }
 
     values.push(habit.id);

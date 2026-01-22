@@ -23,6 +23,13 @@ export type EndCondition =
 
 export type PauseReason = "manual" | "ended";
 
+export type HabitMode = "puntual" | "bloque";
+
+export type TimeBlock = {
+  startTime: string; // "HH:mm"
+  endTime: string; // "HH:mm"
+};
+
 export type Habit = {
   id: HabitId;
   name: string;
@@ -33,11 +40,17 @@ export type Habit = {
 
   endCondition?: EndCondition;
 
+  // ✅ Modo del hábito
+  mode?: HabitMode; // "puntual" | "bloque", default: "bloque" para compatibilidad
+
+  // Legacy: mantener para compatibilidad
   startTime: string; // "HH:mm"
   endTime: string; // "HH:mm"
-
   time?: string; // legacy
   timeOfDay: TimeOfDay;
+
+  // ✅ Múltiples bloques de tiempo (solo para modo "bloque")
+  timeBlocks?: TimeBlock[]; // Array de bloques { startTime, endTime }
 
   calendarEventId?: string | null;
 

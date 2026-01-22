@@ -21,15 +21,8 @@ type ReminderTimesSelectorProps = {
 };
 
 function formatTime(hhmm: string): string {
-  const [hStr, mStr] = hhmm.split(":");
-  const h = Number(hStr);
-  const m = Number(mStr);
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return hhmm;
-
-  // Formato 12h
-  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  const ampm = h < 12 ? "AM" : "PM";
-  return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+  // Mantener formato 24h directamente
+  return hhmm;
 }
 
 function buildDateForTime(hhmm: string): Date {
@@ -174,7 +167,7 @@ export function ReminderTimesSelector({
           <DateTimePicker
             value={pickerDate}
             mode="time"
-            is24Hour={false}
+            is24Hour={true}
             display={Platform.OS === "ios" ? "spinner" : "default"}
             onChange={handleTimeChange}
             themeVariant="dark"
