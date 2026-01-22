@@ -4,12 +4,13 @@ export type HabitNotificationPlan = {
   habitId: string;
   name: string;
   icon: string;
-  startTime: string; // "HH:mm"
+  startTime: string; // "HH:mm" (legacy, usado si reminderTimes no existe)
   schedule:
     | { type: "daily" }
     | { type: "weekly"; daysOfWeek: number[] } // 0..6 (Dom=0)
     | { type: "monthly"; daysOfMonth: number[] }; // 1..31
-  reminderOffsetMinutes: number | null;
+  reminderOffsetMinutes: number | null; // Legacy: usado si reminderTimes no existe
+  reminderTimes?: string[]; // Array de horarios "HH:mm" para múltiples recordatorios
 };
 
 export interface NotificationScheduler {

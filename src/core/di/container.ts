@@ -10,6 +10,7 @@ import { GetHabitMonthlyStats } from "@/domain/usecases/GetHabitMonthlyStats";
 import { GetHabitStreaks } from "@/domain/usecases/GetHabitStreaks";
 import { GetTodayHabits } from "@/domain/usecases/GetTodayHabits";
 import { GetWeeklySummary } from "@/domain/usecases/GetWeeklySummary";
+import { IncrementHabitProgress } from "@/domain/usecases/IncrementHabitProgress";
 import { SetHabitPaused } from "@/domain/usecases/SetHabitPaused";
 import { ToggleHabitForDate } from "@/domain/usecases/ToggleHabitForDate";
 import { ToggleHabitForToday } from "@/domain/usecases/ToggleHabitForToday";
@@ -29,6 +30,10 @@ class Container {
     this.habitLogRepository
   );
   toggleHabitForToday = new ToggleHabitForToday(
+    this.habitRepository,
+    this.habitLogRepository
+  );
+  incrementHabitProgress = new IncrementHabitProgress(
     this.habitRepository,
     this.habitLogRepository
   );

@@ -348,7 +348,14 @@ export default function TodayScreen() {
                 />
 
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.habitText}>{h.name}</Text>
+                  <View style={styles.habitNameRow}>
+                    <Text style={styles.habitText}>{h.name}</Text>
+                    {h.targetRepeats > 1 && (
+                      <Text style={styles.progressIndicator}>
+                        {h.progress}/{h.targetRepeats}
+                      </Text>
+                    )}
+                  </View>
 
                   {!!block && (
                     <View style={styles.blockPill}>
@@ -358,7 +365,11 @@ export default function TodayScreen() {
                 </View>
 
                 <View style={styles.habitRight}>
-                  <Text style={styles.habitHint}>Tocar</Text>
+                  <Text style={styles.habitHint}>
+                    {h.targetRepeats > 1 && h.progress < h.targetRepeats
+                      ? `${h.progress}/${h.targetRepeats}`
+                      : "Tocar"}
+                  </Text>
                 </View>
               </Pressable>
             );
@@ -387,9 +398,16 @@ export default function TodayScreen() {
                 </View>
 
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={[styles.habitText, styles.habitTextDone]}>
-                    {h.name}
-                  </Text>
+                  <View style={styles.habitNameRow}>
+                    <Text style={[styles.habitText, styles.habitTextDone]}>
+                      {h.name}
+                    </Text>
+                    {h.targetRepeats > 1 && (
+                      <Text style={[styles.progressIndicator, styles.progressIndicatorDone]}>
+                        {h.progress}/{h.targetRepeats}
+                      </Text>
+                    )}
+                  </View>
 
                   {!!block && (
                     <View style={[styles.blockPill, styles.blockPillDone]}>
@@ -404,7 +422,9 @@ export default function TodayScreen() {
 
                 <View style={styles.habitRight}>
                   <Text style={[styles.habitHint, styles.habitHintDone]}>
-                    Listo
+                    {h.targetRepeats > 1
+                      ? `${h.progress}/${h.targetRepeats}`
+                      : "Listo"}
                   </Text>
                 </View>
               </Pressable>
@@ -639,10 +659,32 @@ const styles = StyleSheet.create({
   habitCardDone: { backgroundColor: "rgba(50,73,86,0.35)" },
 
   habitDot: { width: 10, height: 10, borderRadius: 999 },
+  habitNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   habitText: { color: colors.text, fontSize: 15, fontWeight: "800" },
   habitTextDone: {
     color: "rgba(241,233,215,0.75)",
     textDecorationLine: "line-through",
+  },
+  progressIndicator: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "900",
+    backgroundColor: "rgba(230,188,1,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(230,188,1,0.30)",
+  },
+  progressIndicatorDone: {
+    color: colors.success,
+    backgroundColor: "rgba(142,205,110,0.15)",
+    borderColor: "rgba(142,205,110,0.30)",
   },
   habitRight: { minWidth: 44, alignItems: "flex-end" },
   habitHint: { color: colors.mutedText, fontSize: 12, fontWeight: "700" },

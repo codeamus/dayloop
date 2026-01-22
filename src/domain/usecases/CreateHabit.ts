@@ -76,7 +76,9 @@ export class CreateHabit {
     weeklyDays?: unknown;
     monthDays?: unknown;
     reminderOffsetMinutes?: unknown;
+    reminderTimes?: unknown;
     date?: unknown;
+    targetRepeats?: unknown;
   }): Promise<{ ok: true; habit: Habit } | { ok: false }> {
     try {
       const name = safeString(input.name, "").trim();
@@ -94,6 +96,19 @@ export class CreateHabit {
         input.reminderOffsetMinutes === undefined
           ? null
           : Number(input.reminderOffsetMinutes);
+
+      // Parsear reminderTimes (array de strings "HH:mm")
+      let reminderTimes: string[] | undefined;
+      if (Array.isArray(input.reminderTimes)) {
+        reminderTimes = input.reminderTimes
+          .filter((t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t))
+          .sort();
+      }
+
+      const targetRepeats =
+        input.targetRepeats === null || input.targetRepeats === undefined
+          ? 1
+          : Math.max(1, Math.floor(Number(input.targetRepeats)) || 1);
 
       const type = input.type ?? "daily";
 
@@ -136,6 +151,7 @@ export class CreateHabit {
         reminderOffsetMinutes: Number.isFinite(reminderOffsetMinutes as number)
           ? (reminderOffsetMinutes as number)
           : null,
+        reminderTimes,
         calendarEventId: null,
         endCondition: { type: "none" },
 
@@ -143,6 +159,7 @@ export class CreateHabit {
         isPaused: false,
         pausedAt: null,
         pauseReason: null,
+        targetRepeats,
       };
 
       await this.habitRepository.create(habit);
@@ -154,6 +171,7 @@ export class CreateHabit {
         startTime,
         schedule: schedule as any,
         reminderOffsetMinutes: habit.reminderOffsetMinutes ?? null,
+        reminderTimes: habit.reminderTimes,
       };
 
       // ✅ NO dispara ahora al crear (solo agenda)

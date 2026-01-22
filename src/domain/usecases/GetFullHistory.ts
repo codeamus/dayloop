@@ -1,5 +1,6 @@
 // src/domain/usecases/GetFullHistory.ts
 import type { Habit } from "@/domain/entities/Habit";
+import type { HabitLog } from "@/domain/entities/HabitLog";
 import type { HabitLogRepository } from "@/domain/repositories/HabitLogRepository";
 import type { HabitRepository } from "@/domain/repositories/HabitRepository";
 
@@ -176,25 +177,16 @@ export class GetFullHistory {
       current = nextDate(current);
     }
 
-    // Obtener logs para cada fecha en el rango
-    const logsByDate = new Map<string, Map<string, boolean>>(); // date -> habitId -> done
-
+    // Obtener logs para cada fecha en el rango (una sola vez)
     const allLogsPromises = dates.map((dateStr) =>
       this.habitLogRepository.getLogsForDate(dateStr)
     );
     const allLogsArrays = await Promise.all(allLogsPromises);
 
+    // Mapa de date -> logs para ese día
+    const logsByDate = new Map<string, HabitLog[]>();
     for (let i = 0; i < dates.length; i++) {
-      const dateStr = dates[i];
-      const logs = allLogsArrays[i] || [];
-
-      const dateMap = new Map<string, boolean>();
-      for (const log of logs) {
-        if (log.done) {
-          dateMap.set(log.habitId, true);
-        }
-      }
-      logsByDate.set(dateStr, dateMap);
+      logsByDate.set(dates[i], allLogsArrays[i] || []);
     }
 
     // Agrupar por semanas
@@ -220,12 +212,24 @@ export class GetFullHistory {
         isDayScheduled(h, dateStr)
       );
 
-      const doneByHabitId =
-        logsByDate.get(dateStr) || new Map<string, boolean>();
+      // Obtener logs del día y verificar progress >= targetRepeats
+      const logsForDay = logsByDate.get(dateStr) || [];
+      const doneHabitIds = new Set<string>();
+
+      for (const log of logsForDay) {
+        const habit = applicableHabits.find((h) => h.id === log.habitId);
+        if (!habit) continue;
+
+        const targetRepeats = habit.targetRepeats ?? 1;
+        const progress = log.progress ?? (log.done ? 1 : 0);
+        if (progress >= targetRepeats) {
+          doneHabitIds.add(log.habitId);
+        }
+      }
 
       const totalPlanned = applicableHabits.length;
       const totalDone = applicableHabits.filter((h) =>
-        doneByHabitId.has(h.id) && doneByHabitId.get(h.id) === true
+        doneHabitIds.has(h.id)
       ).length;
 
       const completionRate =

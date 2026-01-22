@@ -135,9 +135,23 @@ export class GetHabitStreaks {
       };
     }
 
-    // Logs "done" del hábito
+    // Logs del hábito
     const logs = await this.habitLogRepository.getLogsForHabit(habitId);
-    const doneSet = new Set(logs.filter((l) => l.done).map((l) => l.date)); // "YYYY-MM-DD"
+    const targetRepeats = habit.targetRepeats ?? 1;
+
+    // Un día cuenta para streak solo si progress >= targetRepeats (o done=true para compatibilidad)
+    const doneSet = new Set(
+      logs
+        .filter((l) => {
+          // Si tiene progress, verificar progress >= targetRepeats
+          if (l.progress !== undefined) {
+            return l.progress >= targetRepeats;
+          }
+          // Fallback: usar done para compatibilidad con datos antiguos
+          return l.done;
+        })
+        .map((l) => l.date)
+    ); // "YYYY-MM-DD"
     const doneDatesSorted = Array.from(doneSet).sort();
 
     const today = toLocalYMD(new Date());

@@ -37,15 +37,28 @@ export class GetTodayHabits {
     private habitLogRepository: HabitLogRepository
   ) {}
 
-  async execute(date: string): Promise<{ habit: Habit; done: boolean }[]> {
+  async execute(
+    date: string
+  ): Promise<{ habit: Habit; done: boolean; progress: number }[]> {
     const [habits, logs] = await Promise.all([
       this.habitRepository.getAll(),
       this.habitLogRepository.getLogsForDate(date),
     ]);
 
-    const doneById = new Map(
-      logs.filter((l) => l.done).map((l) => [l.habitId, true] as const)
-    );
+    // Mapa de habitId -> { done, progress }
+    const logByHabitId = new Map<
+      string,
+      { done: boolean; progress: number }
+    >();
+
+    for (const log of logs) {
+      const habit = habits.find((h) => h.id === log.habitId);
+      const targetRepeats = habit?.targetRepeats ?? 1;
+      const progress = log.progress ?? (log.done ? 1 : 0);
+      const done = progress >= targetRepeats;
+
+      logByHabitId.set(log.habitId, { done, progress });
+    }
 
     const dayOfWeek = getDayOfWeekFromDate(date);
     const dayOfMonth = getDayOfMonthFromDate(date);
@@ -82,9 +95,13 @@ export class GetTodayHabits {
       return true;
     });
 
-    return todayHabits.map((habit) => ({
-      habit,
-      done: doneById.get(habit.id) ?? false,
-    }));
+    return todayHabits.map((habit) => {
+      const log = logByHabitId.get(habit.id);
+      return {
+        habit,
+        done: log?.done ?? false,
+        progress: log?.progress ?? 0,
+      };
+    });
   }
 }

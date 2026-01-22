@@ -27,9 +27,20 @@ export class ToggleHabitForDate {
     const logs = await this.habitLogRepository.getLogsForHabit(habitId);
     const existing = logs.find((l) => l.date === date);
 
-    const nextDone = existing ? !existing.done : true;
+    const targetRepeats = habit.targetRepeats ?? 1;
 
-    // Preferimos upsert para que sea determinístico
-    await this.habitLogRepository.upsertLog(habitId, date, nextDone);
+    // Si targetRepeats > 1, usar incrementProgress
+    // Si targetRepeats = 1, usar toggle tradicional
+    if (targetRepeats > 1) {
+      await this.habitLogRepository.incrementProgress(
+        habitId,
+        date,
+        targetRepeats
+      );
+    } else {
+      const nextDone = existing ? !existing.done : true;
+      const nextProgress = nextDone ? 1 : 0;
+      await this.habitLogRepository.upsertLog(habitId, date, nextDone, nextProgress);
+    }
   }
 }

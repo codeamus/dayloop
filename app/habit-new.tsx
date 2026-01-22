@@ -19,7 +19,9 @@ import {
 // import { scheduleHabitReminder } from "@/core/notifications/notifications";
 import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
 import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
+import { ReminderTimesSelector } from "@/presentation/components/ReminderTimesSelector";
 import { Screen } from "@/presentation/components/Screen";
+import { TargetSelector } from "@/presentation/components/TargetSelector";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import { colors } from "@/theme/colors";
@@ -120,6 +122,9 @@ export default function HabitNewScreen() {
     number | null
   >(0);
 
+  // ✅ Múltiples horarios de recordatorio
+  const [reminderTimes, setReminderTimes] = useState<string[]>([]);
+
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("daily");
   const [color, setColor] = useState<string>(colors.primary);
@@ -127,6 +132,9 @@ export default function HabitNewScreen() {
   // ✅ Ícono seleccionado (emoji)
   const [emoji, setEmoji] = useState<string>("🔥");
   const [isEmojiSheetOpen, setIsEmojiSheetOpen] = useState(false);
+
+  // ✅ Objetivo diario (repeticiones)
+  const [targetRepeats, setTargetRepeats] = useState<number>(1);
 
   // ✅ Bloque horario
   const [startTime, setStartTime] = useState<string>("08:00");
@@ -238,8 +246,10 @@ export default function HabitNewScreen() {
       // ⚠️ OJO: tu usecase espera "monthDays" (no monthlyDays)
       monthDays: type === "monthly" ? monthlyDays : undefined,
 
-      reminderOffsetMinutes, // null = sin recordatorio
+      reminderOffsetMinutes: reminderTimes.length > 0 ? null : reminderOffsetMinutes, // Si hay reminderTimes, no usar offset
+      reminderTimes: reminderTimes.length > 0 ? reminderTimes : undefined,
       date: undefined as any, // opcional, el usecase usa today si no viene
+      targetRepeats,
     };
 
     const result = await create(payload);
@@ -264,6 +274,8 @@ export default function HabitNewScreen() {
     weeklyDays,
     monthlyDays,
     reminderOffsetMinutes,
+    reminderTimes,
+    targetRepeats,
     create,
   ]);
 
@@ -418,9 +430,27 @@ export default function HabitNewScreen() {
           )}
         </View>
 
-        {/* Recordatorio */}
+        {/* Horarios de recordatorio personalizados */}
         <View style={styles.field}>
-          <Text style={styles.label}>Recordatorio</Text>
+          <ReminderTimesSelector
+            times={reminderTimes}
+            onChange={setReminderTimes}
+            onSyncTargetRepeats={(count) => {
+              // Opcional: sincronizar targetRepeats con cantidad de horarios
+              if (count > 0) {
+                setTargetRepeats(count);
+              }
+            }}
+          />
+        </View>
+
+        {/* Recordatorio (legacy - mantener para compatibilidad) */}
+        <View style={styles.field}>
+          <Text style={styles.label}>Recordatorio (opcional)</Text>
+          <Text style={styles.helper}>
+            Si no usas horarios personalizados arriba, puedes usar esta opción
+            para un recordatorio relativo al inicio del hábito.
+          </Text>
           <View style={styles.row}>
             {REMINDER_OPTIONS.map((opt) => {
               const active = reminderOffsetMinutes === opt.value;
@@ -482,6 +512,16 @@ export default function HabitNewScreen() {
               </Text>
             </Pressable>
           </View>
+        </View>
+
+        {/* Objetivo diario */}
+        <View style={styles.field}>
+          <TargetSelector
+            value={targetRepeats}
+            onChange={setTargetRepeats}
+            min={1}
+            max={20}
+          />
         </View>
 
         {/* Footer */}

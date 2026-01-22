@@ -22,7 +22,14 @@ export class UpdateHabit {
     }
 
     // 3) Si no hay recordatorio -> limpiar ids y listo
-    if (habit.reminderOffsetMinutes === null) {
+    // Verificar tanto reminderTimes como reminderOffsetMinutes para compatibilidad
+    const hasReminderTimes =
+      Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0;
+    const hasReminderOffset =
+      habit.reminderOffsetMinutes !== null &&
+      habit.reminderOffsetMinutes !== undefined;
+
+    if (!hasReminderTimes && !hasReminderOffset) {
       await this.habitRepository.updateNotifications(habit.id, []);
       return;
     }
@@ -35,6 +42,7 @@ export class UpdateHabit {
       startTime: habit.startTime,
       schedule: habit.schedule as any,
       reminderOffsetMinutes: habit.reminderOffsetMinutes ?? 0,
+      reminderTimes: habit.reminderTimes,
     };
 
     const ids = await this.notificationScheduler.scheduleForHabit(plan, {

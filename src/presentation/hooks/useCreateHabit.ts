@@ -13,7 +13,9 @@ type CreateHabitInput = {
   weeklyDays?: number[];
   monthDays?: number[];
   reminderOffsetMinutes?: number | null;
+  reminderTimes?: string[];
   date?: string;
+  targetRepeats?: number;
 };
 
 export function useCreateHabit() {
@@ -31,7 +33,9 @@ export function useCreateHabit() {
       weeklyDays: input.weeklyDays,
       monthDays: input.monthDays,
       reminderOffsetMinutes: input.reminderOffsetMinutes,
+      reminderTimes: input.reminderTimes,
       date: input.date,
+      targetRepeats: input.targetRepeats,
     });
 
     if (!result || !result.ok) return { ok: false };

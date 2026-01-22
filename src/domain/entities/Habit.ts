@@ -41,10 +41,18 @@ export type Habit = {
 
   calendarEventId?: string | null;
 
-  reminderOffsetMinutes?: number | null;
+  reminderOffsetMinutes?: number | null; // Legacy: mantener para compatibilidad
+  reminderTimes?: string[]; // Array de horarios "HH:mm" para múltiples recordatorios
   notificationIds?: string[];
 
   isPaused?: boolean;
   pausedAt?: string | null; // "YYYY-MM-DD"
   pauseReason?: PauseReason | null;
+
+  /**
+   * Número objetivo de repeticiones por día.
+   * Default: 1 (comportamiento tradicional).
+   * Ejemplo: targetRepeats = 8 para "Tomar agua 8 veces al día".
+   */
+  targetRepeats?: number;
 };

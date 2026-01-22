@@ -72,13 +72,15 @@ export function useTodayHabits() {
     const mapped: TodayHabitVM[] = result
       // ✅ ENCHUFE: filtra por schedule + endCondition
       .filter(({ habit }: any) => isHabitDueToday(habit, today))
-      .map(({ habit, done }: any) => {
+      .map(({ habit, done, progress }: any) => {
         return {
           id: habit.id,
           name: habit.name,
           color: habit.color,
           icon: habit.icon,
           done,
+          progress: progress ?? 0,
+          targetRepeats: habit.targetRepeats ?? 1,
           scheduleType: getScheduleType(habit),
           timeOfDay: habit.timeOfDay,
 
@@ -112,7 +114,8 @@ export function useTodayHabits() {
 
   async function toggle(id: string) {
     const dateStr = todayStr();
-    await container.toggleHabitForToday.execute(id, dateStr);
+    // Usar incrementHabitProgress para soportar múltiples repeticiones
+    await container.incrementHabitProgress.execute({ habitId: id, date: dateStr });
     await load();
   }
 

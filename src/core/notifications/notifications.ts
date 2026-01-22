@@ -112,7 +112,14 @@ export async function rescheduleHabitNotificationsForHabit(
   }
 
   // 3) si no hay recordatorio, dejar limpio
-  if (habit.reminderOffsetMinutes === null) {
+  // Verificar tanto reminderTimes como reminderOffsetMinutes para compatibilidad
+  const hasReminderTimes =
+    Array.isArray(habit.reminderTimes) && habit.reminderTimes.length > 0;
+  const hasReminderOffset =
+    habit.reminderOffsetMinutes !== null &&
+    habit.reminderOffsetMinutes !== undefined;
+
+  if (!hasReminderTimes && !hasReminderOffset) {
     await container.habitRepository.updateNotifications(habit.id, []);
     return;
   }
@@ -124,6 +131,7 @@ export async function rescheduleHabitNotificationsForHabit(
     startTime: habit.startTime ?? habit.time ?? "08:00",
     schedule: habit.schedule as any,
     reminderOffsetMinutes: habit.reminderOffsetMinutes ?? 0,
+    reminderTimes: habit.reminderTimes,
   };
 
   const ids = await container.notificationScheduler.scheduleForHabit(plan, {

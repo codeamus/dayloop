@@ -27,6 +27,7 @@ type HabitRow = {
 
   calendar_event_id: string | null;
   reminder_offset_minutes: number | null;
+  reminder_times?: string | null;
 
   notification_ids?: string | null;
 
@@ -34,7 +35,25 @@ type HabitRow = {
   is_paused?: number | null;
   paused_at?: string | null;
   pause_reason?: PauseReason | null;
+
+      // ✅ múltiples repeticiones
+      target_repeats?: number | null;
 };
+
+/**
+ * Verifica si una columna existe en una tabla.
+ * Útil para manejar bases de datos que pueden estar en proceso de migración.
+ */
+function columnExists(table: string, column: string): boolean {
+  try {
+    const columns = db.getAllSync<{ name: string }>(
+      `PRAGMA table_info(${table})`
+    );
+    return columns.some((c) => c.name === column);
+  } catch {
+    return false;
+  }
+}
 
 function safeJsonParse<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw || !raw.trim()) return fallback;
@@ -79,43 +98,82 @@ function toHabit(row: HabitRow): Habit {
     []
   ).filter((x) => typeof x === "string");
 
-  const isPaused = (row.is_paused ?? 0) === 1;
+    const isPaused = (row.is_paused ?? 0) === 1;
 
-  return {
-    id: row.id,
-    name: row.name,
-    color: row.color,
-    icon: row.icon,
+    // Manejar target_repeats de forma defensiva (puede no existir en DBs antiguas)
+    // Nota: columnExists se llama desde fuera de la clase, así que usamos una función helper
+    let targetRepeats = 1;
+    try {
+      const columns = db.getAllSync<{ name: string }>(
+        `PRAGMA table_info(habits)`
+      );
+      const hasTargetRepeats = columns.some((c) => c.name === "target_repeats");
+      if (hasTargetRepeats) {
+        targetRepeats = row.target_repeats ?? 1;
+      }
+    } catch {
+      // Si falla, usar default
+    }
 
-    schedule,
+    return {
+      id: row.id,
+      name: row.name,
+      color: row.color,
+      icon: row.icon,
 
-    startTime,
-    endTime,
+      schedule,
 
-    time: row.time ?? startTime,
+      startTime,
+      endTime,
 
-    timeOfDay: normalizeTimeOfDay(row.time_of_day),
+      time: row.time ?? startTime,
 
-    reminderOffsetMinutes:
-      row.reminder_offset_minutes === null ||
-      row.reminder_offset_minutes === undefined
-        ? null
-        : Number(row.reminder_offset_minutes),
+      timeOfDay: normalizeTimeOfDay(row.time_of_day),
 
-    calendarEventId: row.calendar_event_id ?? null,
+      reminderOffsetMinutes:
+        row.reminder_offset_minutes === null ||
+        row.reminder_offset_minutes === undefined
+          ? null
+          : Number(row.reminder_offset_minutes),
 
-    endCondition,
+      calendarEventId: row.calendar_event_id ?? null,
 
-    notificationIds,
+      endCondition,
 
-    // ✅ pause
-    isPaused,
-    pausedAt: row.paused_at ?? null,
-    pauseReason: row.pause_reason ?? null,
-  };
+      notificationIds,
+
+      // ✅ Múltiples horarios de recordatorio
+      reminderTimes: safeJsonParse<string[]>(
+        row.reminder_times ?? "[]",
+        []
+      ).filter((x) => typeof x === "string" && /^\d{2}:\d{2}$/.test(x)),
+
+      // ✅ pause
+      isPaused,
+      pausedAt: row.paused_at ?? null,
+      pauseReason: row.pause_reason ?? null,
+
+      // ✅ múltiples repeticiones
+      targetRepeats,
+    };
 }
 
 export class SqliteHabitRepository implements HabitRepository {
+  /**
+   * Verifica si una columna existe en una tabla.
+   * Útil para manejar bases de datos que pueden estar en proceso de migración.
+   */
+  private columnExists(table: string, column: string): boolean {
+    try {
+      const columns = db.getAllSync<{ name: string }>(
+        `PRAGMA table_info(${table})`
+      );
+      return columns.some((c) => c.name === column);
+    } catch {
+      return false;
+    }
+  }
+
   async create(habit: Habit): Promise<void> {
     const scheduleType = habit.schedule?.type ?? "daily";
     const scheduleDays =
@@ -129,47 +187,60 @@ export class SqliteHabitRepository implements HabitRepository {
     const endTime = habit.endTime ?? "08:30";
     const timeOfDay = habit.timeOfDay ?? "morning";
 
+    // Construir query dinámicamente según columnas disponibles
+    const hasTargetRepeats = this.columnExists("habits", "target_repeats");
+    const hasReminderTimes = this.columnExists("habits", "reminder_times");
+    
+    const columns = [
+      "id", "name", "color", "icon",
+      "schedule_type", "schedule_days",
+      "end_condition", "time_of_day",
+      "time",
+      "start_time", "end_time",
+      "calendar_event_id",
+      "reminder_offset_minutes",
+      "notification_ids",
+      "is_paused", "paused_at", "pause_reason",
+    ];
+    
+    const values: any[] = [
+      habit.id,
+      habit.name,
+      habit.color,
+      habit.icon,
+      scheduleType,
+      scheduleDays,
+      JSON.stringify(habit.endCondition ?? { type: "none" }),
+      timeOfDay,
+      habit.time ?? startTime,
+      startTime,
+      endTime,
+      habit.calendarEventId ?? null,
+      habit.reminderOffsetMinutes ?? null,
+      JSON.stringify(habit.notificationIds ?? []),
+      habit.isPaused ? 1 : 0,
+      habit.pausedAt ?? null,
+      habit.pauseReason ?? null,
+    ];
+
+    if (hasTargetRepeats) {
+      columns.push("target_repeats");
+      values.push(habit.targetRepeats ?? 1);
+    }
+
+    if (hasReminderTimes) {
+      columns.push("reminder_times");
+      values.push(JSON.stringify(habit.reminderTimes ?? []));
+    }
+
+    const placeholders = values.map(() => "?").join(", ");
+    
     db.runSync(
       `
-      INSERT INTO habits (
-        id, name, color, icon,
-        schedule_type, schedule_days,
-        end_condition, time_of_day,
-        time,
-        start_time, end_time,
-        calendar_event_id,
-        reminder_offset_minutes,
-        notification_ids,
-        is_paused, paused_at, pause_reason
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO habits (${columns.join(", ")})
+      VALUES (${placeholders})
       `,
-      [
-        habit.id,
-        habit.name,
-        habit.color,
-        habit.icon,
-
-        scheduleType,
-        scheduleDays,
-
-        JSON.stringify(habit.endCondition ?? { type: "none" }),
-        timeOfDay,
-
-        habit.time ?? startTime,
-
-        startTime,
-        endTime,
-
-        habit.calendarEventId ?? null,
-
-        habit.reminderOffsetMinutes ?? null,
-
-        JSON.stringify(habit.notificationIds ?? []),
-
-        habit.isPaused ? 1 : 0,
-        habit.pausedAt ?? null,
-        habit.pauseReason ?? null,
-      ]
+      values
     );
   }
 
@@ -204,59 +275,67 @@ export class SqliteHabitRepository implements HabitRepository {
     const endTime = habit.endTime ?? "08:30";
     const timeOfDay = habit.timeOfDay ?? "morning";
 
+    // Construir UPDATE dinámicamente según columnas disponibles
+    const hasTargetRepeats = this.columnExists("habits", "target_repeats");
+    const hasReminderTimes = this.columnExists("habits", "reminder_times");
+    
+    const setClauses = [
+      "name = ?",
+      "color = ?",
+      "icon = ?",
+      "schedule_type = ?",
+      "schedule_days = ?",
+      "end_condition = ?",
+      "time_of_day = ?",
+      "time = ?",
+      "start_time = ?",
+      "end_time = ?",
+      "calendar_event_id = ?",
+      "reminder_offset_minutes = ?",
+      "notification_ids = ?",
+      "is_paused = ?",
+      "paused_at = ?",
+      "pause_reason = ?",
+    ];
+    
+    const values: any[] = [
+      habit.name,
+      habit.color,
+      habit.icon,
+      scheduleType,
+      scheduleDays,
+      JSON.stringify(habit.endCondition ?? { type: "none" }),
+      timeOfDay,
+      habit.time ?? startTime,
+      startTime,
+      endTime,
+      habit.calendarEventId ?? null,
+      habit.reminderOffsetMinutes ?? null,
+      JSON.stringify(habit.notificationIds ?? []),
+      habit.isPaused ? 1 : 0,
+      habit.pausedAt ?? null,
+      habit.pauseReason ?? null,
+    ];
+
+    if (hasTargetRepeats) {
+      setClauses.push("target_repeats = ?");
+      values.push(habit.targetRepeats ?? 1);
+    }
+
+    if (hasReminderTimes) {
+      setClauses.push("reminder_times = ?");
+      values.push(JSON.stringify(habit.reminderTimes ?? []));
+    }
+
+    values.push(habit.id);
+
     db.runSync(
       `
       UPDATE habits
-      SET
-        name = ?,
-        color = ?,
-        icon = ?,
-
-        schedule_type = ?,
-        schedule_days = ?,
-
-        end_condition = ?,
-        time_of_day = ?,
-
-        time = ?,
-        start_time = ?,
-        end_time = ?,
-
-        calendar_event_id = ?,
-        reminder_offset_minutes = ?,
-        notification_ids = ?,
-
-        is_paused = ?,
-        paused_at = ?,
-        pause_reason = ?
-
+      SET ${setClauses.join(", ")}
       WHERE id = ?
       `,
-      [
-        habit.name,
-        habit.color,
-        habit.icon,
-
-        scheduleType,
-        scheduleDays,
-
-        JSON.stringify(habit.endCondition ?? { type: "none" }),
-        timeOfDay,
-
-        habit.time ?? startTime,
-        startTime,
-        endTime,
-
-        habit.calendarEventId ?? null,
-        habit.reminderOffsetMinutes ?? null,
-        JSON.stringify(habit.notificationIds ?? []),
-
-        habit.isPaused ? 1 : 0,
-        habit.pausedAt ?? null,
-        habit.pauseReason ?? null,
-
-        habit.id,
-      ]
+      values
     );
   }
 

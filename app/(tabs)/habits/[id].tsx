@@ -8,7 +8,9 @@ import type { Habit, HabitSchedule } from "@/domain/entities/Habit";
 import { ColorPickerSheet } from "@/presentation/components/ColorPickerSheet";
 import { EmojiPickerSheet } from "@/presentation/components/EmojiPickerSheet";
 import MonthlyCalendar from "@/presentation/components/MonthlyCalendar";
+import { ReminderTimesSelector } from "@/presentation/components/ReminderTimesSelector";
 import { Screen } from "@/presentation/components/Screen";
+import { TargetSelector } from "@/presentation/components/TargetSelector";
 import { useToast } from "@/presentation/components/ToastProvider";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitMonthlyStats } from "@/presentation/hooks/useHabitMonthlyStats";
@@ -114,6 +116,9 @@ export default function EditHabitScreen() {
     number | null
   >(0);
 
+  // ✅ Múltiples horarios de recordatorio
+  const [reminderTimes, setReminderTimes] = useState<string[]>([]);
+
   const [name, setName] = useState("");
   const [scheduleType, setScheduleType] = useState<ScheduleType>("daily");
 
@@ -122,6 +127,9 @@ export default function EditHabitScreen() {
 
   const [color, setColor] = useState<string>(COLOR_PRESETS[0]);
   const [icon, setIcon] = useState<string>("📚");
+
+  // ✅ Objetivo diario (repeticiones)
+  const [targetRepeats, setTargetRepeats] = useState<number>(1);
 
   // bloque horario
   const [startTime, setStartTime] = useState<string>("08:00");
@@ -152,12 +160,22 @@ export default function EditHabitScreen() {
     setColor(habit.color || COLOR_PRESETS[0]);
     setIcon(habit.icon || "📚");
 
-    // ✅ reminder init (aquí sí existe habit)
-    setReminderOffsetMinutes(
-      (habit as any).reminderOffsetMinutes === undefined
-        ? 0
-        : ((habit as any).reminderOffsetMinutes as number | null)
-    );
+    // ✅ objetivo diario init
+    setTargetRepeats(habit.targetRepeats ?? 1);
+
+    // ✅ múltiples horarios de recordatorio init
+    setReminderTimes(habit.reminderTimes ?? []);
+
+    // ✅ reminder init (aquí sí existe habit) - solo si no hay reminderTimes
+    if (!habit.reminderTimes || habit.reminderTimes.length === 0) {
+      setReminderOffsetMinutes(
+        (habit as any).reminderOffsetMinutes === undefined
+          ? 0
+          : ((habit as any).reminderOffsetMinutes as number | null)
+      );
+    } else {
+      setReminderOffsetMinutes(null);
+    }
 
     // schedule init
     if (habit.schedule.type === "daily") {
@@ -314,7 +332,9 @@ export default function EditHabitScreen() {
       endTime,
       time: startTime,
       timeOfDay,
-      reminderOffsetMinutes,
+      reminderOffsetMinutes: reminderTimes.length > 0 ? null : reminderOffsetMinutes,
+      reminderTimes: reminderTimes.length > 0 ? reminderTimes : undefined,
+      targetRepeats,
     };
 
     // 1) Persistir cambios del hábito
@@ -733,51 +753,87 @@ export default function EditHabitScreen() {
           </View>
         )}
 
-        {/* Recordatorio */}
+        {/* Objetivo diario */}
         <View style={styles.field}>
-          <Text style={styles.label}>Recordatorio</Text>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-              flexWrap: "wrap",
+          <TargetSelector
+            value={targetRepeats}
+            onChange={setTargetRepeats}
+            min={1}
+            max={20}
+          />
+        </View>
+
+        {/* Horarios de recordatorio personalizados */}
+        <View style={styles.field}>
+          <ReminderTimesSelector
+            times={reminderTimes}
+            onChange={(newTimes) => {
+              setReminderTimes(newTimes);
+              // Si se agregan horarios personalizados, desactivar reminderOffsetMinutes
+              if (newTimes.length > 0) {
+                setReminderOffsetMinutes(null);
+              }
             }}
-          >
-            {REMINDER_OPTIONS.map((opt) => {
-              const active = reminderOffsetMinutes === opt.value;
-              return (
-                <Pressable
-                  key={String(opt.value)}
-                  onPress={() => setReminderOffsetMinutes(opt.value)}
-                  style={[
-                    {
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 999,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      backgroundColor: "rgba(43,62,74,0.25)",
-                    },
-                    active && {
-                      backgroundColor: "rgba(230,188,1,0.18)",
-                      borderColor: "rgba(230,188,1,0.55)",
-                    },
-                  ]}
-                >
-                  <Text
+            onSyncTargetRepeats={(count) => {
+              // Opcional: sincronizar targetRepeats con cantidad de horarios
+              if (count > 0) {
+                setTargetRepeats(count);
+              }
+            }}
+          />
+        </View>
+
+        {/* Recordatorio (legacy - mantener para compatibilidad) */}
+        {reminderTimes.length === 0 && (
+          <View style={styles.field}>
+            <Text style={styles.label}>Recordatorio (opcional)</Text>
+            <Text style={styles.helper}>
+              Si no usas horarios personalizados arriba, puedes usar esta
+              opción para un recordatorio relativo al inicio del hábito.
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              {REMINDER_OPTIONS.map((opt) => {
+                const active = reminderOffsetMinutes === opt.value;
+                return (
+                  <Pressable
+                    key={String(opt.value)}
+                    onPress={() => setReminderOffsetMinutes(opt.value)}
                     style={[
-                      { fontSize: 13, color: colors.text, fontWeight: "800" },
-                      active && { color: colors.primary, fontWeight: "900" },
+                      {
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        backgroundColor: "rgba(43,62,74,0.25)",
+                      },
+                      active && {
+                        backgroundColor: "rgba(230,188,1,0.18)",
+                        borderColor: "rgba(230,188,1,0.55)",
+                      },
                     ]}
                   >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={[
+                        { fontSize: 13, color: colors.text, fontWeight: "800" },
+                        active && { color: colors.primary, fontWeight: "900" },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         <Pressable onPress={handleSave} style={styles.btn}>
           <Text style={styles.btnText}>Guardar cambios</Text>
@@ -980,6 +1036,12 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 12,
     fontWeight: "800",
+    marginBottom: 8,
+  },
+  helper: {
+    fontSize: 12,
+    color: colors.mutedText,
+    lineHeight: 16,
     marginBottom: 8,
   },
   monthGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

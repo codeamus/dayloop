@@ -177,7 +177,16 @@ export class GetHabitMonthlyStats {
     const logs = await this.habitLogRepository.getLogsForHabit(habitId);
 
     // Set con fechas done (YYYY-MM-DD)
-    const doneSet = new Set(logs.filter((l) => l.done).map((l) => l.date));
+    // Un día cuenta como "done" si progress >= targetRepeats
+    const targetRepeats = habit.targetRepeats ?? 1;
+    const doneSet = new Set(
+      logs
+        .filter((l) => {
+          const progress = l.progress ?? (l.done ? 1 : 0);
+          return progress >= targetRepeats;
+        })
+        .map((l) => l.date)
+    );
 
     // Hoy en local "YYYY-MM-DD"
     const today = toLocalYMD(new Date());

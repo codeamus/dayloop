@@ -48,6 +48,23 @@ function computeReminderHM(plan: HabitNotificationPlan) {
   };
 }
 
+/**
+ * Obtiene todos los horarios de recordatorio para un plan.
+ * Si reminderTimes existe, lo usa. Si no, calcula desde startTime - offset (legacy).
+ */
+function getReminderTimes(plan: HabitNotificationPlan): string[] {
+  // Si hay reminderTimes definidos, usarlos
+  if (Array.isArray(plan.reminderTimes) && plan.reminderTimes.length > 0) {
+    return plan.reminderTimes.filter((t) => /^\d{2}:\d{2}$/.test(t));
+  }
+
+  // Legacy: calcular desde startTime - offset
+  const { hour, minute } = computeReminderHM(plan);
+  const hh = String(hour).padStart(2, "0");
+  const mm = String(minute).padStart(2, "0");
+  return [`${hh}:${mm}`];
+}
+
 function addDays(d: Date, days: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
@@ -67,7 +84,7 @@ function isValidDate(x: Date) {
 function nextOccurrences(plan: HabitNotificationPlan, horizonDays: number) {
   const now = new Date();
   const minFuture = new Date(now.getTime() + 60 * 1000); // >= 60s al futuro
-  const { hour, minute } = computeReminderHM(plan);
+  const reminderTimes = getReminderTimes(plan);
 
   const out: Date[] = [];
   const base = startOfToday(now);
@@ -77,55 +94,55 @@ function nextOccurrences(plan: HabitNotificationPlan, horizonDays: number) {
     if (d.getTime() >= minFuture.getTime()) out.push(d);
   };
 
-  if (plan.schedule.type === "daily") {
-    for (let i = 0; i <= horizonDays; i++) {
-      const d = addDays(base, i);
-      d.setHours(hour, minute, 0, 0);
-      pushIfFuture(d);
+  // Para cada horario de recordatorio
+  for (const timeStr of reminderTimes) {
+    const { h, m } = parseHHmm(timeStr);
+    const hour = h;
+    const minute = m;
+
+    if (plan.schedule.type === "daily") {
+      for (let i = 0; i <= horizonDays; i++) {
+        const d = addDays(base, i);
+        d.setHours(hour, minute, 0, 0);
+        pushIfFuture(d);
+      }
+    } else if (plan.schedule.type === "weekly") {
+      const days = Array.isArray(plan.schedule.daysOfWeek)
+        ? plan.schedule.daysOfWeek
+        : [];
+      const set = new Set(
+        days
+          .map((x) => Math.trunc(Number(x)))
+          .filter((x) => Number.isFinite(x) && x >= 0 && x <= 6)
+      );
+      if (!set.size) continue;
+
+      for (let i = 0; i <= horizonDays; i++) {
+        const d = addDays(base, i);
+        const dow = d.getDay(); // 0..6
+        if (!set.has(dow)) continue;
+        d.setHours(hour, minute, 0, 0);
+        pushIfFuture(d);
+      }
+    } else if (plan.schedule.type === "monthly") {
+      const days = Array.isArray(plan.schedule.daysOfMonth)
+        ? plan.schedule.daysOfMonth
+        : [];
+      const set = new Set(
+        days
+          .map((x) => Math.trunc(Number(x)))
+          .filter((x) => Number.isFinite(x) && x >= 1 && x <= 31)
+      );
+      if (!set.size) continue;
+
+      for (let i = 0; i <= horizonDays; i++) {
+        const d = addDays(base, i);
+        const dom = d.getDate(); // 1..31
+        if (!set.has(dom)) continue;
+        d.setHours(hour, minute, 0, 0);
+        pushIfFuture(d);
+      }
     }
-    return out;
-  }
-
-  if (plan.schedule.type === "weekly") {
-    const days = Array.isArray(plan.schedule.daysOfWeek)
-      ? plan.schedule.daysOfWeek
-      : [];
-    const set = new Set(
-      days
-        .map((x) => Math.trunc(Number(x)))
-        .filter((x) => Number.isFinite(x) && x >= 0 && x <= 6)
-    );
-    if (!set.size) return out;
-
-    for (let i = 0; i <= horizonDays; i++) {
-      const d = addDays(base, i);
-      const dow = d.getDay(); // 0..6
-      if (!set.has(dow)) continue;
-      d.setHours(hour, minute, 0, 0);
-      pushIfFuture(d);
-    }
-    return out;
-  }
-
-  if (plan.schedule.type === "monthly") {
-    const days = Array.isArray(plan.schedule.daysOfMonth)
-      ? plan.schedule.daysOfMonth
-      : [];
-    const set = new Set(
-      days
-        .map((x) => Math.trunc(Number(x)))
-        .filter((x) => Number.isFinite(x) && x >= 1 && x <= 31)
-    );
-    if (!set.size) return out;
-
-    for (let i = 0; i <= horizonDays; i++) {
-      const d = addDays(base, i);
-      const dom = d.getDate(); // 1..31
-      if (!set.has(dom)) continue;
-      d.setHours(hour, minute, 0, 0);
-      pushIfFuture(d);
-    }
-    return out;
   }
 
   return out;

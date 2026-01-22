@@ -104,9 +104,18 @@ export class GetWeeklySummary {
         isHabitScheduledForDate(h, day)
       );
 
-      const doneByHabitId = new Set(
-        logs.filter((l) => l.done).map((l) => l.habitId)
-      );
+      // Un hábito cuenta como "done" si progress >= targetRepeats
+      const doneByHabitId = new Set<string>();
+      for (const log of logs) {
+        const habit = applicableHabits.find((h) => h.id === log.habitId);
+        if (!habit) continue;
+
+        const targetRepeats = habit.targetRepeats ?? 1;
+        const progress = log.progress ?? (log.done ? 1 : 0);
+        if (progress >= targetRepeats) {
+          doneByHabitId.add(log.habitId);
+        }
+      }
 
       const totalPlanned = applicableHabits.length;
       const totalDone = applicableHabits.filter((h) =>

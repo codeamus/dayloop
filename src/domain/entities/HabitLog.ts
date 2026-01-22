@@ -6,6 +6,12 @@ export interface HabitLog {
   habitId: HabitId;
   date: string; // 'YYYY-MM-DD'
   done: boolean;
+  /**
+   * Progreso del día: cuántas veces se ha completado el hábito.
+   * Default: 1 (comportamiento tradicional).
+   * El hábito se considera "completado" (done=true) cuando progress >= targetRepeats.
+   */
+  progress?: number;
 }
 
 export type HabitStreak = {
