@@ -5,6 +5,7 @@ import DateTimePicker, {
 import { router } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Platform,
   Pressable,
@@ -107,7 +108,8 @@ function DayOfMonthSelector({
 }
 
 export default function HabitNewScreen() {
-  const { create, isLoading } = useCreateHabit();
+  const { create } = useCreateHabit();
+  const [isLoading, setIsLoading] = useState(false);
 
   const REMINDER_OPTIONS = useMemo(
     () => [
@@ -270,44 +272,50 @@ export default function HabitNewScreen() {
         ? timeBlocks[0]
         : { startTime: "08:00", endTime: "08:30" };
 
-    const payload = {
-      name: name.trim(),
-      color,
-      icon: emoji,
-      type,
-      mode,
-      startTime: firstBlock.startTime,
-      endTime: firstBlock.endTime,
-      timeBlocks: mode === "bloque" ? timeBlocks : undefined,
-      weeklyDays: type === "weekly" ? weeklyDays : undefined,
+    setIsLoading(true);
 
-      // ⚠️ OJO: tu usecase espera "monthDays" (no monthlyDays)
-      monthDays: type === "monthly" ? monthlyDays : undefined,
+    try {
+      const payload = {
+        name: name.trim(),
+        color,
+        icon: emoji,
+        type,
+        mode,
+        startTime: firstBlock.startTime,
+        endTime: firstBlock.endTime,
+        timeBlocks: mode === "bloque" ? timeBlocks : undefined,
+        weeklyDays: type === "weekly" ? weeklyDays : undefined,
 
-      reminderOffsetMinutes:
-        mode === "puntual" && reminderTimes.length > 0
-          ? null
-          : reminderOffsetMinutes, // Si hay reminderTimes, no usar offset
-      reminderTimes:
-        mode === "puntual" && reminderTimes.length > 0
-          ? reminderTimes
-          : undefined,
-      date: undefined as any, // opcional, el usecase usa today si no viene
-      targetRepeats: autoTargetRepeats, // Sincronizado automáticamente
-    };
+        // ⚠️ OJO: tu usecase espera "monthDays" (no monthlyDays)
+        monthDays: type === "monthly" ? monthlyDays : undefined,
 
-    const result = await create(payload);
+        reminderOffsetMinutes:
+          mode === "puntual" && reminderTimes.length > 0
+            ? null
+            : reminderOffsetMinutes, // Si hay reminderTimes, no usar offset
+        reminderTimes:
+          mode === "puntual" && reminderTimes.length > 0
+            ? reminderTimes
+            : undefined,
+        date: undefined as any, // opcional, el usecase usa today si no viene
+        targetRepeats: autoTargetRepeats, // Sincronizado automáticamente
+      };
 
-    if (!result?.ok) {
-      Alert.alert("No se pudo guardar", "Inténtalo nuevamente.");
-      return;
+      const result = await create(payload);
+
+      if (!result?.ok) {
+        Alert.alert("No se pudo guardar", "Inténtalo nuevamente.");
+        return;
+      }
+
+      // ✅ IMPORTANTE:
+      // Ya NO agendas aquí.
+      // - CreateHabit (domain) agenda + guarda notificationIds (respetando weekly/monthly)
+      // - useCreateHabit (hook) también hace reschedule/cancel robusto (blindaje)
+      router.back();
+    } finally {
+      setIsLoading(false);
     }
-
-    // ✅ IMPORTANTE:
-    // Ya NO agendas aquí.
-    // - CreateHabit (domain) agenda + guarda notificationIds (respetando weekly/monthly)
-    // - useCreateHabit (hook) también hace reschedule/cancel robusto (blindaje)
-    router.back();
   }, [
     name,
     color,
@@ -573,9 +581,14 @@ export default function HabitNewScreen() {
             onPress={handleSubmit}
             disabled={isLoading}
           >
-            <Text style={styles.primaryText}>
-              {isLoading ? "Guardando..." : "Guardar hábito"}
-            </Text>
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={colors.bg} style={{ marginRight: 4 }} />
+                <Text style={styles.primaryText}>Guardando...</Text>
+              </View>
+            ) : (
+              <Text style={styles.primaryText}>Guardar hábito</Text>
+            )}
           </Pressable>
         </View>
       </ScrollView>
@@ -804,6 +817,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   primaryText: { color: colors.bg, fontSize: 14, fontWeight: "900" },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
 
   timePickerContainer: {
     marginTop: 8,
