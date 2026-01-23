@@ -1,6 +1,7 @@
 // app/stats/index.tsx
 import { HistorySectionList } from "@/presentation/components/HistorySectionList";
 import { Screen } from "@/presentation/components/Screen";
+import { useAllHabits } from "@/presentation/hooks/useAllHabits";
 import { useFullHistory } from "@/presentation/hooks/useFullHistory";
 import { useWeeklySummary } from "@/presentation/hooks/useWeeklySummary";
 import { colors } from "@/theme/colors";
@@ -84,6 +85,38 @@ function AnimatedBar({
   );
 }
 
+/**
+ * Componente Empty State para cuando no hay datos de estadísticas
+ */
+function EmptyState({
+  hasHabits,
+  onGoToToday,
+}: {
+  hasHabits: boolean;
+  onGoToToday: () => void;
+}) {
+  return (
+    <View style={styles.emptyStateContainer}>
+      <View style={styles.emptyStateIcon}>
+        <Text style={styles.emptyStateEmoji}>📊</Text>
+      </View>
+      <Text style={styles.emptyStateTitle}>
+        {hasHabits ? "¡Día 1 en marcha!" : "Crea tu primer hábito"}
+      </Text>
+      <Text style={styles.emptyStateSubtitle}>
+        {hasHabits
+          ? "Completa tu primer hábito hoy para empezar a ver tu racha y progreso."
+          : "Comienza tu viaje creando tu primer hábito y empieza a construir tu rutina diaria."}
+      </Text>
+      {hasHabits && (
+        <Pressable onPress={onGoToToday} style={styles.emptyStateButton}>
+          <Text style={styles.emptyStateButtonText}>Ir a Hoy</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 export default function StatsScreen() {
   const [viewMode, setViewMode] = useState<"summary" | "history">("summary");
   const { loading, days, error, reload } = useWeeklySummary("current");
@@ -94,6 +127,7 @@ export default function StatsScreen() {
     loadMore,
     reload: reloadHistory,
   } = useFullHistory();
+  const { habits } = useAllHabits();
 
   // Pull-to-refresh: no queremos bloquear la pantalla completa
   const [refreshing, setRefreshing] = useState(false);
@@ -149,6 +183,28 @@ export default function StatsScreen() {
 
     return { overallPct, weekPlanned, weekDone, bestDay };
   }, [days]);
+
+  // Verificar si hay hábitos completados (logs con done=true o progress >= targetRepeats)
+  const hasCompletedHabits = computed.weekDone > 0;
+  const hasAnyHabits = habits.length > 0;
+  
+  // Verificar si el historial está vacío (sin hábitos completados)
+  const hasHistoryData = useMemo(() => {
+    if (!history || history.months.length === 0) return false;
+    return history.months.some(
+      (month) =>
+        month.weeks.length > 0 &&
+        month.weeks.some(
+          (week) =>
+            week.days.length > 0 &&
+            week.days.some((day) => day.totalDone > 0)
+        )
+    );
+  }, [history]);
+
+  const handleGoToToday = useCallback(() => {
+    router.replace("/(tabs)/");
+  }, []);
 
   // Animación suave al montar / cambiar viewMode
   const fade = useRef(new Animated.Value(0)).current;
@@ -255,121 +311,137 @@ export default function StatsScreen() {
 
       {/* ================= VISTA DE HISTÓRICO ================= */}
       {viewMode === "history" && (
-        <HistorySectionList
-          history={history}
-          loading={historyLoading}
-          loadingMore={loadingMore}
-          onEndReached={handleLoadMore}
-        />
+        <>
+          {!hasHistoryData && !historyLoading ? (
+            <EmptyState
+              hasHabits={hasAnyHabits}
+              onGoToToday={handleGoToToday}
+            />
+          ) : (
+            <HistorySectionList
+              history={history}
+              loading={historyLoading}
+              loadingMore={loadingMore}
+              onEndReached={handleLoadMore}
+            />
+          )}
+        </>
       )}
 
       {/* ================= VISTA DE RESUMEN (SEMANA) ================= */}
       {viewMode === "summary" && (
         <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-          />
-        }
-      >
-        <Animated.View
-          style={{
-            opacity: fade,
-            transform: [{ translateY: translate }],
-          }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }
         >
-          {/* Rango de fechas */}
-          {!!rangeText && (
-            <View style={styles.rangePill}>
-              <Text style={styles.rangeText}>{rangeText}</Text>
-            </View>
-          )}
+          {!hasCompletedHabits && !loading ? (
+            <EmptyState
+              hasHabits={hasAnyHabits}
+              onGoToToday={handleGoToToday}
+            />
+          ) : (
+            <Animated.View
+              style={{
+                opacity: fade,
+                transform: [{ translateY: translate }],
+              }}
+            >
+              {/* Rango de fechas */}
+              {!!rangeText && (
+                <View style={styles.rangePill}>
+                  <Text style={styles.rangeText}>{rangeText}</Text>
+                </View>
+              )}
 
-          {error && <Text style={styles.empty}>{error}</Text>}
+              {error && <Text style={styles.empty}>{error}</Text>}
 
-          {/* Resumen global */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Esta semana (Lun–Dom)</Text>
+              {/* Resumen global */}
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Esta semana (Lun–Dom)</Text>
 
-            <View style={styles.bigRow}>
-              <Text style={styles.cardMainValue}>{computed.overallPct}%</Text>
+                <View style={styles.bigRow}>
+                  <Text style={styles.cardMainValue}>{computed.overallPct}%</Text>
 
-              <View style={styles.bigRight}>
-                <Text style={styles.bigHint}>Promedio</Text>
-                <Text style={styles.bigSubHint}>
-                  (solo días con hábitos planificados)
-                </Text>
-              </View>
-            </View>
-
-            {/* Barra grande animada */}
-            <View style={styles.bigBarBackground}>
-              <AnimatedBar
-                pct={computed.overallPct}
-                height={10}
-                fillColor={colors.primary}
-              />
-            </View>
-
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Semana</Text>
-                <Text style={styles.summaryValue}>
-                  {computed.weekDone}/{computed.weekPlanned}
-                </Text>
-              </View>
-
-              <View style={styles.summaryDivider} />
-
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Mejor día</Text>
-                <Text style={styles.summaryValue}>
-                  {computed.bestDay
-                    ? `${computed.bestDay.label} (${toPct(
-                        computed.bestDay.completionRate
-                      )}%)`
-                    : "—"}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Detalle por día */}
-          <Text style={styles.sectionTitle}>Detalle por día</Text>
-
-          {days.length === 0 && (
-            <Text style={styles.empty}>
-              Aún no hay datos suficientes para mostrar estadísticas.
-            </Text>
-          )}
-
-          {days.map((day) => {
-            const pct = day.totalPlanned <= 0 ? 0 : toPct(day.completionRate);
-
-            return (
-              <View key={day.date} style={styles.dayRow}>
-                <View style={styles.dayHeader}>
-                  <Text style={styles.dayLabel}>{day.label}</Text>
-                  <Text style={styles.dayInfo}>
-                    {day.totalDone}/{day.totalPlanned} ({pct}%)
-                  </Text>
+                  <View style={styles.bigRight}>
+                    <Text style={styles.bigHint}>Promedio</Text>
+                    <Text style={styles.bigSubHint}>
+                      (solo días con hábitos planificados)
+                    </Text>
+                  </View>
                 </View>
 
-                {/* Barra por día animada */}
-                <AnimatedBar pct={pct} height={8} fillColor={colors.success} />
+                {/* Barra grande animada */}
+                <View style={styles.bigBarBackground}>
+                  <AnimatedBar
+                    pct={computed.overallPct}
+                    height={10}
+                    fillColor={colors.primary}
+                  />
+                </View>
 
-                {day.totalPlanned <= 0 && (
-                  <Text style={styles.dayMuted}>Sin hábitos planificados</Text>
-                )}
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryLabel}>Semana</Text>
+                    <Text style={styles.summaryValue}>
+                      {computed.weekDone}/{computed.weekPlanned}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryDivider} />
+
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryLabel}>Mejor día</Text>
+                    <Text style={styles.summaryValue}>
+                      {computed.bestDay
+                        ? `${computed.bestDay.label} (${toPct(
+                            computed.bestDay.completionRate
+                          )}%)`
+                        : "—"}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            );
-          })}
-        </Animated.View>
-      </ScrollView>
+
+              {/* Detalle por día */}
+              <Text style={styles.sectionTitle}>Detalle por día</Text>
+
+              {days.length === 0 && (
+                <Text style={styles.empty}>
+                  Aún no hay datos suficientes para mostrar estadísticas.
+                </Text>
+              )}
+
+              {days.map((day) => {
+                const pct = day.totalPlanned <= 0 ? 0 : toPct(day.completionRate);
+
+                return (
+                  <View key={day.date} style={styles.dayRow}>
+                    <View style={styles.dayHeader}>
+                      <Text style={styles.dayLabel}>{day.label}</Text>
+                      <Text style={styles.dayInfo}>
+                        {day.totalDone}/{day.totalPlanned} ({pct}%)
+                      </Text>
+                    </View>
+
+                    {/* Barra por día animada */}
+                    <AnimatedBar pct={pct} height={8} fillColor={colors.success} />
+
+                    {day.totalPlanned <= 0 && (
+                      <Text style={styles.dayMuted}>Sin hábitos planificados</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </Animated.View>
+          )}
+        </ScrollView>
       )}
     </Screen>
   );
@@ -569,5 +641,56 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 11,
     fontWeight: "800",
+  },
+
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+    minHeight: 400,
+  },
+  emptyStateIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(50,73,86,0.55)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  emptyStateEmoji: {
+    fontSize: 40,
+  },
+  emptyStateTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: "900",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  emptyStateSubtitle: {
+    color: colors.mutedText,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 24,
+    maxWidth: 300,
+  },
+  emptyStateButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  emptyStateButtonText: {
+    color: colors.primaryText,
+    fontSize: 15,
+    fontWeight: "900",
   },
 });
