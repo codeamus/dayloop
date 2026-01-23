@@ -1,9 +1,11 @@
 // app/(tabs)/index.tsx
 import { container } from "@/core/di/container";
 import { rescheduleHabitNotificationsForHabit } from "@/core/notifications/notifications";
+import { PremiumBanner } from "@/presentation/components/PremiumBanner";
 import { Screen } from "@/presentation/components/Screen";
 import { StatusPill } from "@/presentation/components/StatusPill";
 import { useNotificationPermission } from "@/presentation/hooks/useNotificationPermission";
+import { usePremiumUpsell } from "@/presentation/hooks/usePremiumUpsell";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
@@ -68,6 +70,13 @@ export default function TodayScreen() {
   const { isGranted, requestPermission } = useNotificationPermission();
   const shouldShowNotificationPrompt = !isGranted && habits.length > 0;
 
+  // Premium upsell: detecta cuando se alcanza una racha de 3 días
+  const {
+    shouldShowUpsell,
+    dismissUpsell,
+    refresh: refreshUpsell,
+  } = usePremiumUpsell();
+
   // Re-agenda weekly/monthly Android al entrar al Home
   useFocusEffect(
     useCallback(() => {
@@ -114,6 +123,18 @@ export default function TodayScreen() {
 
   const pending = filtered.filter((h) => !h.done);
   const completed = filtered.filter((h) => h.done);
+
+  // Wrapper para toggle que también refresca el upsell
+  const handleToggle = useCallback(
+    async (habitId: string) => {
+      await toggle(habitId);
+      // Pequeño delay para asegurar que el streak se haya actualizado
+      setTimeout(() => {
+        refreshUpsell();
+      }, 300);
+    },
+    [toggle, refreshUpsell]
+  );
 
   // ✅ Resumen semanal (últimos 7 días) sin navegar a [id]
   const [weekDoneDays, setWeekDoneDays] = useState<number>(0); // días con >=1 hábito completado
@@ -356,7 +377,7 @@ export default function TodayScreen() {
               <Pressable
                 key={`${h.id}-${index}`}
                 style={styles.habitCard}
-                onPress={() => toggle(h.id)} // ✅ solo completar
+                onPress={() => handleToggle(h.id)} // ✅ solo completar
               >
                 <View
                   style={[
@@ -409,7 +430,7 @@ export default function TodayScreen() {
               <Pressable
                 key={`${h.id}-${index}`}
                 style={[styles.habitCard, styles.habitCardDone]}
-                onPress={() => toggle(h.id)} // ✅ permite desmarcar
+                onPress={() => handleToggle(h.id)} // ✅ permite desmarcar
               >
                 <View style={styles.checkCircle}>
                   <Text style={styles.checkIcon}>✓</Text>
@@ -460,6 +481,9 @@ export default function TodayScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {/* Premium Upsell Banner */}
+      <PremiumBanner visible={shouldShowUpsell} onDismiss={dismissUpsell} />
     </Screen>
   );
 }
