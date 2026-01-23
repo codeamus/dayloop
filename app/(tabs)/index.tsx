@@ -1,11 +1,9 @@
 // app/(tabs)/index.tsx
 import { container } from "@/core/di/container";
 import { rescheduleHabitNotificationsForHabit } from "@/core/notifications/notifications";
-import { PremiumBanner } from "@/presentation/components/PremiumBanner";
 import { Screen } from "@/presentation/components/Screen";
 import { StatusPill } from "@/presentation/components/StatusPill";
 import { useNotificationPermission } from "@/presentation/hooks/useNotificationPermission";
-import { usePremiumUpsell } from "@/presentation/hooks/usePremiumUpsell";
 import { useTodayHabits } from "@/presentation/hooks/useTodayHabits";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
@@ -63,6 +61,16 @@ function toLocalYMD(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+const DAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"] as const; // 0=Dom, 1=Lun, ..., 6=Sab
+
+function dayLetterFromYMD(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const wd = new Date(y, m - 1, d).getDay();
+  return DAY_LETTERS[wd] ?? "?";
+}
+
+type WeekDayStatus = { date: string; hasDone: boolean; isToday: boolean };
+
 export default function TodayScreen() {
   const { loading, habits, toggle } = useTodayHabits();
   const [timeTab, setTimeTab] = useState<TimeTab>("all");
@@ -70,14 +78,6 @@ export default function TodayScreen() {
   const { isGranted, requestPermission } = useNotificationPermission();
   const shouldShowNotificationPrompt = !isGranted && habits.length > 0;
 
-  // Premium upsell: detecta cuando se alcanza una racha de 3 días
-  const {
-    shouldShowUpsell,
-    dismissUpsell,
-    refresh: refreshUpsell,
-  } = usePremiumUpsell();
-
-  // Re-agenda weekly/monthly Android al entrar al Home
   useFocusEffect(
     useCallback(() => {
       (async () => {
@@ -124,21 +124,14 @@ export default function TodayScreen() {
   const pending = filtered.filter((h) => !h.done);
   const completed = filtered.filter((h) => h.done);
 
-  // Wrapper para toggle que también refresca el upsell
   const handleToggle = useCallback(
     async (habitId: string) => {
       await toggle(habitId);
-      // Pequeño delay para asegurar que el streak se haya actualizado
-      setTimeout(() => {
-        refreshUpsell();
-      }, 300);
     },
-    [toggle, refreshUpsell]
+    [toggle]
   );
 
-  // ✅ Resumen semanal (últimos 7 días) sin navegar a [id]
-  const [weekDoneDays, setWeekDoneDays] = useState<number>(0); // días con >=1 hábito completado
-  const [weekTotalDone, setWeekTotalDone] = useState<number>(0); // total completados en 7 días
+  const [weekStatus, setWeekStatus] = useState<WeekDayStatus[]>([]);
   const [weekLoading, setWeekLoading] = useState(false);
 
   useEffect(() => {
@@ -148,42 +141,51 @@ export default function TodayScreen() {
       setWeekLoading(true);
       try {
         const today = new Date();
-        const days: string[] = [];
-        for (let i = 0; i < 7; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() - i);
-          days.push(toLocalYMD(d));
-        }
-        const daySet = new Set(days);
+        const todayYMD = toLocalYMD(today);
+        const day = today.getDay();
+        const diffToMonday = (day + 6) % 7;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - diffToMonday);
 
-        // Traer logs y contar completados en los últimos 7 días
-        const logs = await (container as any).habitLogRepository?.listAll?.();
+        const dates: string[] = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+          dates.push(toLocalYMD(d));
+        }
+
+        const logArrays = await Promise.all(
+          dates.map((date) => container.habitLogRepository.getLogsForDate(date))
+        );
 
         if (cancelled) return;
 
-        if (!Array.isArray(logs)) {
-          setWeekDoneDays(0);
-          setWeekTotalDone(0);
-          return;
-        }
+        const status: WeekDayStatus[] = dates.map((date, i) => ({
+          date,
+          hasDone: (logArrays[i] ?? []).some((l) => l.done),
+          isToday: date === todayYMD,
+        }));
 
-        let totalDone = 0;
-        const doneDates = new Set<string>();
-
-        for (const l of logs) {
-          const date = l?.date; // "YYYY-MM-DD"
-          const done = !!l?.done;
-          if (!done || !date || !daySet.has(date)) continue;
-          totalDone += 1;
-          doneDates.add(date);
-        }
-
-        setWeekTotalDone(totalDone);
-        setWeekDoneDays(doneDates.size);
+        setWeekStatus(status);
       } catch {
         if (!cancelled) {
-          setWeekDoneDays(0);
-          setWeekTotalDone(0);
+          const today = new Date();
+          const todayYMD = toLocalYMD(today);
+          const day = today.getDay();
+          const diffToMonday = (day + 6) % 7;
+          const monday = new Date(today);
+          monday.setDate(today.getDate() - diffToMonday);
+          const fallback: WeekDayStatus[] = [];
+          for (let i = 0; i < 7; i++) {
+            const d = new Date(monday);
+            d.setDate(monday.getDate() + i);
+            fallback.push({
+              date: toLocalYMD(d),
+              hasDone: false,
+              isToday: toLocalYMD(d) === todayYMD,
+            });
+          }
+          setWeekStatus(fallback);
         }
       } finally {
         if (!cancelled) setWeekLoading(false);
@@ -193,7 +195,10 @@ export default function TodayScreen() {
     return () => {
       cancelled = true;
     };
-  }, [habits]); // refresca al cambiar estado (toggle)
+  }, [habits]);
+
+  const isPerfectWeek =
+    weekStatus.length === 7 && weekStatus.every((d) => d.hasDone);
 
   if (loading) {
     return (
@@ -288,10 +293,20 @@ export default function TodayScreen() {
 
         {/* Resumen semana */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Últimos 7 días</Text>
+          <View style={styles.weekTitleRow}>
+            <Text style={styles.summaryTitle}>Esta semana</Text>
+            {isPerfectWeek && (
+              <Feather
+                name="award"
+                size={16}
+                color={colors.primary}
+                style={styles.weekAwardIcon}
+              />
+            )}
+          </View>
 
           {weekLoading ? (
-            <View style={{ marginTop: 10 }}>
+            <View style={styles.weekLoadingWrap}>
               <ActivityIndicator color={colors.primary} />
               <Text style={[styles.summaryHintText, { marginTop: 8 }]}>
                 Calculando…
@@ -299,36 +314,35 @@ export default function TodayScreen() {
             </View>
           ) : (
             <>
-              <Text style={styles.summaryBig}>
-                {weekDoneDays}
-                <Text style={styles.summarySmall}> días activos</Text>
-              </Text>
-
-              <Text style={[styles.summaryHintText, { marginTop: 10 }]} numberOfLines={2}>
-                {weekTotalDone > 0
-                  ? `Marcaste ${weekTotalDone} completados en la semana.`
-                  : "Aún no completas hábitos esta semana."}
-              </Text>
-
-              <View style={styles.weekMiniRow}>
-                <View style={styles.weekPill}>
-                  <View style={styles.weekPillRow}>
-                    <Feather name="activity" size={14} color={colors.text} />
-                    <Text style={styles.weekPillText}>{weekDoneDays}/7</Text>
-                  </View>
-                </View>
-
-                <View style={styles.weekPill}>
-                  <View style={styles.weekPillRow}>
-                    <Feather
-                      name="check-circle"
-                      size={14}
-                      color={colors.text}
+              <View style={styles.weekCirclesRow}>
+                {weekStatus.map((day) => (
+                  <View key={day.date} style={styles.weekCircleWrap}>
+                    <View
+                      style={[
+                        styles.weekCircle,
+                        day.hasDone && styles.weekCircleDone,
+                        day.isToday && styles.weekCircleToday,
+                      ]}
                     />
-                    <Text style={styles.weekPillText}>{weekTotalDone}</Text>
+                    <Text style={styles.weekCircleLabel}>
+                      {dayLetterFromYMD(day.date)}
+                    </Text>
                   </View>
-                </View>
+                ))}
               </View>
+              {isPerfectWeek && (
+                <View style={styles.weekEncouragementWrap}>
+                  <Feather
+                    name="award"
+                    size={14}
+                    color={colors.primary}
+                    style={styles.weekEncouragementIcon}
+                  />
+                  <Text style={styles.weekEncouragementText}>
+                    ¡Semana perfecta! Sigue así.
+                  </Text>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -482,8 +496,6 @@ export default function TodayScreen() {
         </View>
       </ScrollView>
 
-      {/* Premium Upsell Banner */}
-      <PremiumBanner visible={shouldShowUpsell} onDismiss={dismissUpsell} />
     </Screen>
   );
 }
@@ -631,26 +643,58 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(230,188,1,0.65)",
   },
 
-  weekMiniRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-    flexWrap: "wrap",
-  },
-  weekPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(43,62,74,0.35)",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  weekPillRow: {
+  weekTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  weekPillText: { color: colors.text, fontWeight: "900", fontSize: 12 },
+  weekAwardIcon: { marginLeft: 2 },
+  weekLoadingWrap: { marginTop: 10 },
+  weekCirclesRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    gap: 4,
+  },
+  weekCircleWrap: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  weekCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.14)",
+  },
+  weekCircleDone: {
+    backgroundColor: colors.primary,
+    borderColor: "rgba(230,188,1,0.4)",
+  },
+  weekCircleToday: {
+    borderWidth: 2,
+    borderColor: colors.text,
+  },
+  weekCircleLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.mutedText,
+  },
+  weekEncouragementWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 12,
+  },
+  weekEncouragementIcon: { marginTop: 1 },
+  weekEncouragementText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.primary,
+  },
 
   filterRow: {
     flexDirection: "row",
