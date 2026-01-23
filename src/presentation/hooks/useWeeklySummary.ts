@@ -38,13 +38,21 @@ function addDaysLocalNoon(base: Date, deltaDays: number): Date {
   return d;
 }
 
-export function useWeeklySummary(preset: WeekPreset) {
+export function useWeeklySummary(
+  preset: WeekPreset | string
+) {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState<DaySummary[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // referencia para el usecase (hoy o hoy-7)
+  // referencia para el usecase (hoy, hoy-7, o fecha personalizada)
   const referenceDate = useMemo(() => {
+    // Si es una fecha personalizada (formato YYYY-MM-DD), usarla directamente
+    if (typeof preset === "string" && /^\d{4}-\d{2}-\d{2}$/.test(preset)) {
+      return preset;
+    }
+    
+    // Si es un preset, calcular la fecha
     const base = todayLocalNoon();
     const ref = preset === "previous" ? addDaysLocalNoon(base, -7) : base;
     return formatLocalYMD(ref);

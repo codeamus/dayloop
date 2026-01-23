@@ -17,6 +17,7 @@ type HistoryItem = {
   totalPlanned: number;
   totalDone: number;
   completionRate: number;
+  weekStart?: string; // Para agrupar por semanas
 };
 
 type HistorySection = {
@@ -59,59 +60,86 @@ export function HistorySectionList({
   onEndReached,
   onDayPress,
 }: Props) {
-  // Convertir history a formato SectionList
+  // Convertir history a formato SectionList, manteniendo información de semanas
   const sections: HistorySection[] =
-    history?.months.map((month) => ({
-      title: month.monthLabel,
-      monthGroup: month,
-      data: month.weeks.flatMap((week) =>
-        week.days.map((day) => ({
-          type: "day" as const,
-          date: day.date,
-          label: day.label,
-          totalPlanned: day.totalPlanned,
-          totalDone: day.totalDone,
-          completionRate: day.completionRate,
-        }))
-      ),
-    })) || [];
+    history?.months.map((month) => {
+      const items: HistoryItem[] = [];
+      
+      month.weeks.forEach((week, weekIndex) => {
+        week.days.forEach((day, dayIndex) => {
+          items.push({
+            type: "day" as const,
+            date: day.date,
+            label: day.label,
+            totalPlanned: day.totalPlanned,
+            totalDone: day.totalDone,
+            completionRate: day.completionRate,
+            weekStart: week.weekStart, // Mantener info de semana para separadores
+          });
+        });
+      });
+      
+      return {
+        title: month.monthLabel,
+        monthGroup: month,
+        data: items,
+      };
+    }) || [];
 
-  const renderItem = ({ item }: { item: HistoryItem }) => {
+  const renderItem = ({ item, index, section }: { item: HistoryItem; index: number; section: HistorySection }) => {
     const pct = item.totalPlanned <= 0 ? 0 : toPct(item.completionRate);
+    const isRestDay = item.totalPlanned <= 0;
+    
+    // Detectar si es el primer día de una nueva semana (para separador)
+    const prevItem = index > 0 ? section.data[index - 1] : null;
+    const isNewWeek = prevItem && prevItem.weekStart !== item.weekStart;
 
     return (
-      <Pressable
-        style={styles.dayRow}
-        onPress={() => onDayPress?.(item.date)}
-        disabled={!onDayPress}
-      >
-        <View style={styles.dayHeader}>
-          <View style={styles.dayLeft}>
-            <Text style={styles.dayLabel}>{item.label}</Text>
-            <Text style={styles.dayDate}>{formatShortDate(item.date)}</Text>
-          </View>
-          <Text style={styles.dayInfo}>
-            {item.totalDone}/{item.totalPlanned} ({pct}%)
-          </Text>
-        </View>
-
-        {/* Barra de progreso */}
-        <View style={styles.barBackground}>
-          <View
-            style={[
-              styles.barFill,
-              {
-                width: `${pct}%`,
-                backgroundColor: colors.success,
-              },
-            ]}
-          />
-        </View>
-
-        {item.totalPlanned <= 0 && (
-          <Text style={styles.dayMuted}>Sin hábitos planificados</Text>
+      <View>
+        {/* Separador sutil entre semanas */}
+        {isNewWeek && (
+          <View style={styles.weekSeparator} />
         )}
-      </Pressable>
+        
+        <Pressable
+          style={styles.dayRow}
+          onPress={() => onDayPress?.(item.date)}
+          disabled={!onDayPress}
+        >
+          <View style={styles.dayHeader}>
+            <View style={styles.dayLeft}>
+              <Text style={styles.dayLabel}>{item.label}</Text>
+              <Text style={styles.dayDate}>{formatShortDate(item.date)}</Text>
+            </View>
+            {isRestDay ? (
+              <Text style={styles.dayRestLabel}>Descanso</Text>
+            ) : (
+              <Text style={styles.dayInfo}>
+                {item.totalDone}/{item.totalPlanned} ({pct}%)
+              </Text>
+            )}
+          </View>
+
+          {/* Barra de progreso */}
+          {isRestDay ? (
+            <View style={styles.restDayBar}>
+              <View style={[styles.restDayBarFill, { width: "100%" }]} />
+            </View>
+          ) : (
+            <View style={styles.barBackground}>
+              <View
+                style={[
+                  styles.barFill,
+                  {
+                    width: `${pct}%`,
+                    backgroundColor: colors.success,
+                  },
+                ]}
+              />
+            </View>
+          )}
+        </Pressable>
+      </View>
     );
   };
 
@@ -124,14 +152,25 @@ export function HistorySectionList({
   };
 
   const renderFooter = () => {
-    if (!loadingMore) return null;
+    if (loadingMore) {
+      return (
+        <View style={styles.footer}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.footerText}>Cargando más...</Text>
+        </View>
+      );
+    }
 
-    return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color={colors.primary} />
-        <Text style={styles.footerText}>Cargando más...</Text>
-      </View>
-    );
+    // Empty state al final cuando no hay más datos
+    if (sections.length > 0 && !loading) {
+      return (
+        <View style={styles.endMessage}>
+          <Text style={styles.endMessageText}>Aquí empieza tu camino</Text>
+        </View>
+      );
+    }
+
+    return null;
   };
 
 
@@ -167,6 +206,12 @@ export function HistorySectionList({
         ListFooterComponent={renderFooter}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        // Optimizaciones de rendimiento
+        initialNumToRender={10}
+        windowSize={5}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews={true}
       />
     </View>
   );
@@ -262,6 +307,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "800",
   },
+  dayRestLabel: {
+    color: "rgba(241,233,215,0.60)",
+    fontSize: 11,
+    fontWeight: "800",
+    fontStyle: "italic",
+  },
+  restDayBar: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(43,62,74,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.15)",
+    overflow: "hidden",
+  },
+  restDayBarFill: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.10)",
+  },
+  weekSeparator: {
+    height: 1,
+    backgroundColor: "rgba(241,233,215,0.08)",
+    marginVertical: 8,
+    marginHorizontal: 16,
+  },
   footer: {
     flexDirection: "row",
     alignItems: "center",
@@ -273,5 +343,17 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 12,
     fontWeight: "800",
+  },
+  endMessage: {
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  endMessageText: {
+    color: "rgba(241,233,215,0.50)",
+    fontSize: 13,
+    fontWeight: "800",
+    fontStyle: "italic",
+    letterSpacing: 0.3,
   },
 });

@@ -3,9 +3,14 @@ import { HistorySectionList } from "@/presentation/components/HistorySectionList
 import { Screen } from "@/presentation/components/Screen";
 import { useAllHabits } from "@/presentation/hooks/useAllHabits";
 import { useFullHistory } from "@/presentation/hooks/useFullHistory";
+import { useGlobalStreaks } from "@/presentation/hooks/useGlobalStreaks";
+import {
+  useFirstCompletedHabitDate,
+  useHasCompletedHabits,
+} from "@/presentation/hooks/useHasCompletedHabits";
 import { useWeeklySummary } from "@/presentation/hooks/useWeeklySummary";
 import { colors } from "@/theme/colors";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -119,7 +124,24 @@ function EmptyState({
 
 export default function StatsScreen() {
   const [viewMode, setViewMode] = useState<"summary" | "history">("summary");
-  const { loading, days, error, reload } = useWeeklySummary("current");
+  
+  // Estado para navegación de semanas
+  const [weekOffset, setWeekOffset] = useState(0);
+  
+  // Calcular fecha de referencia basada en el offset
+  const referenceDate = useMemo(() => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + weekOffset * 7);
+    
+    const y = targetDate.getFullYear();
+    const m = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const d = String(targetDate.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, [weekOffset]);
+  
+  const { loading, days, error, reload } = useWeeklySummary(referenceDate);
   const {
     history,
     loading: historyLoading,
@@ -128,6 +150,21 @@ export default function StatsScreen() {
     reload: reloadHistory,
   } = useFullHistory();
   const { habits } = useAllHabits();
+  const { streaks: globalStreaks, refresh: refreshStreaks } = useGlobalStreaks();
+  const { hasCompleted: hasEverCompletedHabit } = useHasCompletedHabits();
+  const { firstDate: firstCompletedDate } = useFirstCompletedHabitDate();
+
+  // Refresco automático cuando la pantalla entra en foco
+  useFocusEffect(
+    useCallback(() => {
+      if (viewMode === "summary") {
+        reload();
+        refreshStreaks(); // Refrescar rachas también
+      } else {
+        reloadHistory();
+      }
+    }, [viewMode, reload, reloadHistory, refreshStreaks])
+  );
 
   // Pull-to-refresh: no queremos bloquear la pantalla completa
   const [refreshing, setRefreshing] = useState(false);
@@ -143,6 +180,61 @@ export default function StatsScreen() {
       setRefreshing(false);
     }
   };
+
+  // Calcular el límite mínimo de navegación (semana del primer hábito completado)
+  const minWeekOffset = useMemo(() => {
+    // Si no hay hábitos creados, no permitir navegar hacia atrás
+    if (habits.length === 0) return 0;
+
+    // Si no hay fecha de primer hábito completado, no permitir navegar hacia atrás
+    if (!firstCompletedDate) return 0;
+
+    // Obtener el lunes de la semana del primer hábito completado
+    const firstDate = parseLocalYMDNoon(firstCompletedDate);
+    const firstDateDay = firstDate.getDay(); // 0-6 (Dom-Sáb)
+    const daysToMonday = firstDateDay === 0 ? 6 : firstDateDay - 1; // Días hasta el lunes
+    const mondayOfFirstWeek = new Date(firstDate);
+    mondayOfFirstWeek.setDate(firstDate.getDate() - daysToMonday);
+    mondayOfFirstWeek.setHours(12, 0, 0, 0);
+
+    // Obtener el lunes de la semana actual
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const todayDay = today.getDay();
+    const daysToMondayToday = todayDay === 0 ? 6 : todayDay - 1;
+    const mondayOfCurrentWeek = new Date(today);
+    mondayOfCurrentWeek.setDate(today.getDate() - daysToMondayToday);
+    mondayOfCurrentWeek.setHours(12, 0, 0, 0);
+
+    // Calcular diferencia en semanas (negativa porque vamos hacia atrás)
+    const diffMs = mondayOfFirstWeek.getTime() - mondayOfCurrentWeek.getTime();
+    const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+
+    return diffWeeks;
+  }, [firstCompletedDate, habits.length]);
+
+  // Navegación de semanas con límite
+  const handlePreviousWeek = useCallback(() => {
+    setWeekOffset((prev) => {
+      const newOffset = prev - 1;
+      // Si el nuevo offset es menor que el mínimo, no permitir
+      if (newOffset < minWeekOffset) {
+        return prev; // Mantener el offset actual
+      }
+      return newOffset;
+    });
+  }, [minWeekOffset]);
+
+  const handleNextWeek = useCallback(() => {
+    setWeekOffset((prev) => Math.min(prev + 1, 0)); // No permitir ir más adelante que hoy
+  }, []);
+
+  const handleResetToCurrent = useCallback(() => {
+    setWeekOffset(0);
+  }, []);
+
+  // Verificar si se puede navegar hacia atrás
+  const canGoBack = weekOffset > minWeekOffset;
 
   const handleLoadMore = useCallback(() => {
     loadMore();
@@ -184,11 +276,9 @@ export default function StatsScreen() {
     return { overallPct, weekPlanned, weekDone, bestDay };
   }, [days]);
 
-  // Verificar si hay hábitos completados (logs con done=true o progress >= targetRepeats)
-  const hasCompletedHabits = computed.weekDone > 0;
   const hasAnyHabits = habits.length > 0;
   
-  // Verificar si el historial está vacío (sin hábitos completados)
+  // Verificar si el historial está vacío (sin hábitos completados en toda la historia)
   const hasHistoryData = useMemo(() => {
     if (!history || history.months.length === 0) return false;
     return history.months.some(
@@ -201,6 +291,14 @@ export default function StatsScreen() {
         )
     );
   }, [history]);
+
+  // Verificar si hay hábitos completados en la semana actual
+  const hasCompletedHabitsInWeek = computed.weekDone > 0;
+  
+  // Solo mostrar empty state si NUNCA ha completado un hábito en toda su historia
+  // hasEverCompletedHabit es null mientras carga, así que usamos hasHistoryData como fallback
+  const hasEverCompleted = hasEverCompletedHabit ?? hasHistoryData;
+  const shouldShowEmptyState = !hasEverCompleted && !hasCompletedHabitsInWeek;
 
   const handleGoToToday = useCallback(() => {
     router.replace("/(tabs)/");
@@ -341,7 +439,7 @@ export default function StatsScreen() {
             />
           }
         >
-          {!hasCompletedHabits && !loading ? (
+          {shouldShowEmptyState && !loading ? (
             <EmptyState
               hasHabits={hasAnyHabits}
               onGoToToday={handleGoToToday}
@@ -353,10 +451,48 @@ export default function StatsScreen() {
                 transform: [{ translateY: translate }],
               }}
             >
-              {/* Rango de fechas */}
+              {/* Rango de fechas con navegación */}
               {!!rangeText && (
-                <View style={styles.rangePill}>
-                  <Text style={styles.rangeText}>{rangeText}</Text>
+                <View style={styles.rangeContainer}>
+                  <Pressable
+                    onPress={handlePreviousWeek}
+                    style={[
+                      styles.rangeArrow,
+                      !canGoBack && styles.rangeArrowDisabled,
+                    ]}
+                    hitSlop={8}
+                    disabled={!canGoBack}
+                  >
+                    <Text
+                      style={[
+                        styles.rangeArrowText,
+                        !canGoBack && styles.rangeArrowTextDisabled,
+                      ]}
+                    >
+                      ‹
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleResetToCurrent}
+                    style={styles.rangePill}
+                    disabled={weekOffset === 0}
+                  >
+                    <Text
+                      style={[
+                        styles.rangeText,
+                        weekOffset !== 0 && styles.rangeTextActive,
+                      ]}
+                    >
+                      {rangeText}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleNextWeek}
+                    style={styles.rangeArrow}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.rangeArrowText}>›</Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -407,6 +543,25 @@ export default function StatsScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {/* Rachas globales */}
+                <View style={styles.streaksRow}>
+                  <View style={styles.streaksItem}>
+                    <Text style={styles.streaksLabel}>Racha actual</Text>
+                    <Text style={styles.streaksValue}>
+                      {globalStreaks.currentDailyStreak} días
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryDivider} />
+
+                  <View style={styles.streaksItem}>
+                    <Text style={styles.streaksLabel}>Mejor racha</Text>
+                    <Text style={styles.streaksValue}>
+                      {globalStreaks.bestDailyStreak} días
+                    </Text>
+                  </View>
+                </View>
               </View>
 
               {/* Detalle por día */}
@@ -420,21 +575,28 @@ export default function StatsScreen() {
 
               {days.map((day) => {
                 const pct = day.totalPlanned <= 0 ? 0 : toPct(day.completionRate);
+                const isRestDay = day.totalPlanned <= 0;
 
                 return (
                   <View key={day.date} style={styles.dayRow}>
                     <View style={styles.dayHeader}>
                       <Text style={styles.dayLabel}>{day.label}</Text>
-                      <Text style={styles.dayInfo}>
-                        {day.totalDone}/{day.totalPlanned} ({pct}%)
-                      </Text>
+                      {isRestDay ? (
+                        <Text style={styles.dayRestLabel}>Descanso</Text>
+                      ) : (
+                        <Text style={styles.dayInfo}>
+                          {day.totalDone}/{day.totalPlanned} ({pct}%)
+                        </Text>
+                      )}
                     </View>
 
                     {/* Barra por día animada */}
-                    <AnimatedBar pct={pct} height={8} fillColor={colors.success} />
-
-                    {day.totalPlanned <= 0 && (
-                      <Text style={styles.dayMuted}>Sin hábitos planificados</Text>
+                    {isRestDay ? (
+                      <View style={styles.restDayBar}>
+                        <View style={[styles.restDayBarFill, { width: "100%" }]} />
+                      </View>
+                    ) : (
+                      <AnimatedBar pct={pct} height={8} fillColor={colors.success} />
                     )}
                   </View>
                 );
@@ -521,21 +683,50 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
+  rangeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+    width: "100%",
+  },
+  rangeArrow: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(43,62,74,0.25)",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  rangeArrowText: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  rangeArrowDisabled: {
+    opacity: 0.3,
+  },
+  rangeArrowTextDisabled: {
+    opacity: 0.5,
+  },
   rangePill: {
-    alignSelf: "flex-start",
+    flex: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: "rgba(43,62,74,0.25)",
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: 12,
+    alignItems: "center",
   },
   rangeText: {
     color: "rgba(241,233,215,0.85)",
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0.2,
+  },
+  rangeTextActive: {
+    color: colors.primary,
   },
 
   card: {
@@ -641,6 +832,45 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontSize: 11,
     fontWeight: "800",
+  },
+  dayRestLabel: {
+    color: "rgba(241,233,215,0.60)",
+    fontSize: 11,
+    fontWeight: "800",
+    fontStyle: "italic",
+  },
+  restDayBar: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(43,62,74,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(241,233,215,0.15)",
+    overflow: "hidden",
+  },
+  restDayBarFill: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(241,233,215,0.10)",
+  },
+  streaksRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: "row",
+    gap: 12,
+  },
+  streaksItem: { flex: 1 },
+  streaksLabel: {
+    color: colors.mutedText,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  streaksValue: {
+    marginTop: 4,
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   emptyStateContainer: {
