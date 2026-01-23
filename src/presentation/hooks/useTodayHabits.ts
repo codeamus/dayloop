@@ -1,5 +1,6 @@
 // src/presentation/hooks/useTodayHabits.ts
 import { container } from "@/core/di/container";
+import { ReviewService } from "@/core/ReviewService";
 import { isHabitDueToday } from "@/domain/services/habitDue"; // ✅ NUEVO
 import type { TimeOfDay } from "@/utils/timeOfDay";
 import { useFocusEffect } from "expo-router";
@@ -141,6 +142,21 @@ export function useTodayHabits() {
         habitId: id,
         date: dateStr,
       });
+
+      // Verificar si el hábito quedó completado después del incremento
+      const newProgress = currentProgress + 1;
+      const isNowCompleted = newProgress >= targetRepeats;
+
+      if (isNowCompleted) {
+        // Obtener la racha del hábito de forma asíncrona (no bloquea la UI)
+        container.getHabitStreaks.execute(id).then((streaks) => {
+          if (streaks.currentDailyStreak >= 3) {
+            ReviewService.triggerReviewFlow();
+          }
+        }).catch(() => {
+          // Silenciar errores para no romper la UX
+        });
+      }
     }
     
     await load();
