@@ -23,4 +23,11 @@ export interface NotificationScheduler {
 
   // ✅ clave: cancelar por habitId mirando el sistema
   cancelByHabitId(habitId: string): Promise<void>;
+
+  /**
+   * Programa una notificación de rescate/retention que se dispara en 48 horas.
+   * Usa un ID fijo para que cada vez que se programe, sobrescriba la anterior.
+   * La notificación se programa a la misma hora local que cuando se invoca.
+   */
+  scheduleRetentionNotification(): Promise<void>;
 }

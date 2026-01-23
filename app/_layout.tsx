@@ -1,5 +1,8 @@
 // app/_layout.tsx
-import { initNotificationsConfig } from "@/core/notifications/notifications";
+import {
+  initNotificationsConfig,
+  scheduleRetentionNotification,
+} from "@/core/notifications/notifications";
 import { initDatabase } from "@/data/sqlite/database";
 import * as NavigationBar from "expo-navigation-bar";
 import {
@@ -9,7 +12,7 @@ import {
   useSegments,
 } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { ActivityIndicator, AppState, Platform, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -75,6 +78,22 @@ export default function RootLayout() {
     initDatabase();
     initNotificationsConfig();
     void initReviewTracking();
+    // Programar notificación de rescate al iniciar la app
+    void scheduleRetentionNotification();
+  }, []);
+
+  // Reiniciar notificación de rescate cada vez que la app entra en foreground
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        // La app entró en foreground, reiniciar el reloj de 48 horas
+        void scheduleRetentionNotification();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {

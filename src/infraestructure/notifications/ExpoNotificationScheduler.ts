@@ -218,4 +218,67 @@ export class ExpoNotificationScheduler implements NotificationScheduler {
 
     return ids;
   }
+
+  async scheduleRetentionNotification(): Promise<void> {
+    const RETENTION_NOTIFICATION_ID = "retention-rescue";
+    
+    try {
+      // Cancelar la notificación anterior si existe (usando el ID fijo)
+      await Notifications.cancelScheduledNotificationAsync(RETENTION_NOTIFICATION_ID);
+    } catch {
+      // Ignorar si no existe
+    }
+
+    // Obtener la hora actual local
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentSecond = now.getSeconds();
+
+    // Calcular la fecha en 48 horas, manteniendo la misma hora local
+    const targetDate = new Date(now);
+    targetDate.setDate(targetDate.getDate() + 2); // +2 días = 48 horas
+    targetDate.setHours(currentHour, currentMinute, currentSecond, 0);
+
+    // Asegurar que la fecha sea al menos 60 segundos en el futuro
+    const minFuture = new Date(now.getTime() + 60 * 1000);
+    if (targetDate.getTime() < minFuture.getTime()) {
+      targetDate.setTime(minFuture.getTime());
+    }
+
+    // Mensajes de rescate aleatorios
+    const mensajes = [
+      {
+        title: "¡No rompas la cadena!",
+        body: "Tus hábitos te extrañan. Entra un momento y registra tu progreso de hoy.",
+      },
+      {
+        title: "Un pequeño paso hoy...",
+        body: "...es un gran salto mañana. Solo toma 10 segundos marcar tus hábitos en Dayloop.",
+      },
+      {
+        title: "Mantén el ritmo",
+        body: "La constancia es la clave del éxito. ¡Vuelve para completar tus objetivos!",
+      },
+      {
+        title: "¿Seguimos adelante?",
+        body: "No importa si ayer no pudiste, lo que cuenta es retomar hoy. ¡Tú puedes!",
+      },
+    ];
+
+    // Seleccionar mensaje aleatorio
+    const mensajeSeleccionado =
+      mensajes[Math.floor(Math.random() * mensajes.length)];
+
+    // Programar la notificación con ID fijo para que sobrescriba la anterior
+    await Notifications.scheduleNotificationAsync({
+      identifier: RETENTION_NOTIFICATION_ID,
+      content: {
+        title: mensajeSeleccionado.title,
+        body: mensajeSeleccionado.body,
+        data: { kind: "retention_rescue" },
+      },
+      trigger: { type: "date", date: targetDate },
+    });
+  }
 }

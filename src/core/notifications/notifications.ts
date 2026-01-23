@@ -172,3 +172,25 @@ export async function scheduleDebugNotificationIn(seconds: number) {
     trigger,
   });
 }
+
+// ==========================
+// Notificación de Rescate/Retention
+// ==========================
+/**
+ * Programa una notificación de rescate que se dispara en 48 horas.
+ * Cada vez que se invoca, cancela la anterior y programa una nueva,
+ * reiniciando el "reloj" de 48 horas.
+ * La notificación se programa a la misma hora local que cuando se invoca.
+ */
+export async function scheduleRetentionNotification(): Promise<void> {
+  if (isExpoGo) return;
+
+  const ok = await requestNotificationPermission();
+  if (!ok) return;
+
+  try {
+    await container.notificationScheduler.scheduleRetentionNotification();
+  } catch (error) {
+    console.warn("[notifications] scheduleRetentionNotification failed:", error);
+  }
+}
