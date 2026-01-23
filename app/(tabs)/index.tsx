@@ -244,20 +244,20 @@ export default function TodayScreen() {
 
           <View style={styles.summaryHintWrap}>
             {totalToday === 0 ? (
-              <Text style={styles.summaryHintText}>
+              <Text style={styles.summaryHintText} numberOfLines={2}>
                 Crea tu primer hábito para empezar.
               </Text>
             ) : pendingToday > 0 ? (
               <View style={styles.inlineRow}>
-                <Feather name="clock" size={14} color={colors.mutedText} />
-                <Text style={styles.summaryHintText}>
+                <Feather name="clock" size={14} color={colors.mutedText} style={{ marginTop: 2 }} />
+                <Text style={[styles.summaryHintText, { flex: 1 }]} numberOfLines={2}>
                   Te faltan {pendingToday} para cerrar el día.
                 </Text>
               </View>
             ) : (
               <View style={styles.inlineRow}>
-                <Feather name="zap" size={14} color={colors.primary} />
-                <Text style={styles.summaryHintText}>
+                <Feather name="zap" size={14} color={colors.primary} style={{ marginTop: 2 }} />
+                <Text style={[styles.summaryHintText, { flex: 1 }]} numberOfLines={2}>
                   Día completo. Mantén la racha
                 </Text>
               </View>
@@ -283,7 +283,7 @@ export default function TodayScreen() {
                 <Text style={styles.summarySmall}> días activos</Text>
               </Text>
 
-              <Text style={[styles.summaryHintText, { marginTop: 10 }]}>
+              <Text style={[styles.summaryHintText, { marginTop: 10 }]} numberOfLines={2}>
                 {weekTotalDone > 0
                   ? `Marcaste ${weekTotalDone} completados en la semana.`
                   : "Aún no completas hábitos esta semana."}
@@ -549,6 +549,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(50,73,86,0.35)",
     borderWidth: 1,
     borderColor: colors.border,
+    minWidth: 0, // Permite que el contenido se ajuste correctamente
   },
   summaryTitle: {
     color: "rgba(241,233,215,0.75)",
@@ -561,6 +562,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 22,
     fontWeight: "900",
+    flexShrink: 1,
   },
   summarySmall: {
     color: "rgba(241,233,215,0.75)",
@@ -571,16 +573,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     minHeight: 34,
     justifyContent: "center",
+    flexShrink: 1,
   },
 
   inlineRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 6,
+    flexWrap: "wrap",
   },
 
   summaryHintText: {
-    flex: 1,
+    flexShrink: 1,
     color: colors.mutedText,
     fontSize: 12,
     fontWeight: "700",
