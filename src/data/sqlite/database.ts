@@ -3,7 +3,7 @@ import * as SQLite from "expo-sqlite";
 
 export const db = SQLite.openDatabaseSync("dayloop.db");
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 export function initDatabase() {
   db.execSync(`
@@ -57,6 +57,11 @@ export function initDatabase() {
       completed_at TEXT,
       UNIQUE(habit_id, date)
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
 
   migrateIfNeeded();
@@ -71,6 +76,18 @@ function columnExistsInTable(table: string, column: string): boolean {
       `PRAGMA table_info(${table})`
     );
     return columns.some((c) => c.name === column);
+  } catch {
+    return false;
+  }
+}
+
+function tableExists(name: string): boolean {
+  try {
+    const row = db.getFirstSync<{ n: number }>(
+      `SELECT 1 as n FROM sqlite_master WHERE type='table' AND name=?`,
+      [name]
+    );
+    return !!row?.n;
   } catch {
     return false;
   }
@@ -94,11 +111,14 @@ function migrateIfNeeded() {
     !columnExistsInTable("habits", "mode") ||
     !columnExistsInTable("habits", "time_blocks");
 
+  const needsV9Migration = !tableExists("settings");
+
   if (
     user_version >= SCHEMA_VERSION &&
     !needsV6Migration &&
     !needsV7Migration &&
-    !needsV8Migration
+    !needsV8Migration &&
+    !needsV9Migration
   )
     return;
 
@@ -112,6 +132,7 @@ function migrateIfNeeded() {
     if (user_version < 6 || needsV6Migration) migrateToV6();
     if (user_version < 7 || needsV7Migration) migrateToV7();
     if (user_version < 8) migrateToV8();
+    if (user_version < 9 || needsV9Migration) migrateToV9();
 
     db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
     db.execSync(`COMMIT;`);
@@ -341,6 +362,15 @@ function migrateToV8() {
   }
 }
 
+function migrateToV9() {
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+  `);
+}
+
 /**
  * Agrega una columna de forma segura, verificando primero si existe.
  * SQLite no soporta IF NOT EXISTS en ALTER TABLE, así que verificamos manualmente.
@@ -386,6 +416,7 @@ export function resetDatabase() {
     db.execSync(`
       DROP TABLE IF EXISTS habit_logs;
       DROP TABLE IF EXISTS habits;
+      DROP TABLE IF EXISTS settings;
     `);
 
     // Resetea versión para que initDatabase vuelva a correr migraciones/schema limpio

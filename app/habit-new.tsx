@@ -27,6 +27,7 @@ import {
   type TimeBlock,
 } from "@/presentation/components/TimeBlocksSelector";
 import WeekdaySelector from "@/presentation/components/WeekdaySelector";
+import { useCalendarSync } from "@/presentation/hooks/useCalendarSync";
 import { useCreateHabit } from "@/presentation/hooks/useCreateHabit";
 import { colors } from "@/theme/colors";
 import { addMinutesHHmm } from "@/utils/time";
@@ -109,6 +110,7 @@ function DayOfMonthSelector({
 
 export default function HabitNewScreen() {
   const { create } = useCreateHabit();
+  const { calendarSyncEnabled, syncNow } = useCalendarSync();
   const [isLoading, setIsLoading] = useState(false);
 
   const REMINDER_OPTIONS = useMemo(
@@ -308,10 +310,8 @@ export default function HabitNewScreen() {
         return;
       }
 
-      // ✅ IMPORTANTE:
-      // Ya NO agendas aquí.
-      // - CreateHabit (domain) agenda + guarda notificationIds (respetando weekly/monthly)
-      // - useCreateHabit (hook) también hace reschedule/cancel robusto (blindaje)
+      if (calendarSyncEnabled) await syncNow();
+
       router.back();
     } finally {
       setIsLoading(false);
@@ -331,6 +331,8 @@ export default function HabitNewScreen() {
     reminderTimes,
     targetRepeats,
     create,
+    calendarSyncEnabled,
+    syncNow,
   ]);
 
   const isBlockingScroll = showTimePicker || isEmojiSheetOpen;

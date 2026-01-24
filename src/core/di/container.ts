@@ -1,6 +1,7 @@
 // src/core/di/container.ts
 import { SqliteHabitLogRepository } from "@/data/sqlite/SqliteHabitLogRepository";
 import { SqliteHabitRepository } from "@/data/sqlite/SqliteHabitRepository";
+import { SqliteSettingsRepository } from "@/data/sqlite/SqliteSettingsRepository";
 
 import { CreateHabit } from "@/domain/usecases/CreateHabit";
 import { DeleteHabit } from "@/domain/usecases/DeleteHabit";
@@ -8,21 +9,28 @@ import { GetAllHabits } from "@/domain/usecases/GetAllHabits";
 import { GetFullHistory } from "@/domain/usecases/GetFullHistory";
 import { GetHabitMonthlyStats } from "@/domain/usecases/GetHabitMonthlyStats";
 import { GetHabitStreaks } from "@/domain/usecases/GetHabitStreaks";
+import { GetSetting } from "@/domain/usecases/GetSetting";
 import { GetTodayHabits } from "@/domain/usecases/GetTodayHabits";
 import { GetWeeklySummary } from "@/domain/usecases/GetWeeklySummary";
 import { IncrementHabitProgress } from "@/domain/usecases/IncrementHabitProgress";
 import { SetHabitPaused } from "@/domain/usecases/SetHabitPaused";
+import { SetSetting } from "@/domain/usecases/SetSetting";
 import { ToggleHabitForDate } from "@/domain/usecases/ToggleHabitForDate";
 import { ToggleHabitForToday } from "@/domain/usecases/ToggleHabitForToday";
 import { UpdateHabit } from "@/domain/usecases/UpdateHabit";
 
+import { ExpoCalendarSyncService } from "@/infraestructure/calendar/ExpoCalendarSyncService";
 import { ExpoNotificationScheduler } from "@/infraestructure/notifications/ExpoNotificationScheduler";
+
+const SETTINGS_KEY_CALENDAR_SYNC = "calendar_sync_enabled";
 
 class Container {
   habitRepository = new SqliteHabitRepository();
   habitLogRepository = new SqliteHabitLogRepository();
+  settingsRepository = new SqliteSettingsRepository();
 
   notificationScheduler = new ExpoNotificationScheduler();
+  calendarSyncService = new ExpoCalendarSyncService();
 
   // Home / Today
   getTodayHabits = new GetTodayHabits(
@@ -83,6 +91,10 @@ class Container {
     this.habitRepository,
     this.habitLogRepository
   );
+
+  getSetting = new GetSetting(this.settingsRepository);
+  setSetting = new SetSetting(this.settingsRepository);
 }
 
 export const container = new Container();
+export { SETTINGS_KEY_CALENDAR_SYNC };

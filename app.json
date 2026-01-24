@@ -22,7 +22,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.codeamus.dayloop",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCalendarsUsageDescription": "Dayloop utiliza el calendario para ayudarte a visualizar tus bloques de tiempo y hábitos diarios."
       },
       "icon": {
         "dark": "./assets/icons/ios-dark.png",
@@ -67,7 +68,13 @@
         }
       ],
       "expo-notifications",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Dayloop utiliza el calendario para ayudarte a visualizar tus bloques de tiempo y hábitos diarios."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

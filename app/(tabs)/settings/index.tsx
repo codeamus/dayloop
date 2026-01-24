@@ -1,12 +1,13 @@
-// app/settings/index.tsx
+// app/(tabs)/settings/index.tsx
 import { resetDatabase } from "@/data/sqlite/database";
 import { Screen } from "@/presentation/components/Screen";
+import { useCalendarSync } from "@/presentation/hooks/useCalendarSync";
 import { colors } from "@/theme/colors";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Application from "expo-application";
 import * as Notifications from "expo-notifications";
 import { Link, router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -38,6 +39,42 @@ const PLAY_STORE_REVIEW_URL = (packageName: string) =>
 export default function SettingsScreen() {
   const [permState, setPermState] = useState<PermissionState>("loading");
   const [busy, setBusy] = useState(false);
+
+  const {
+    isIOS,
+    calendarSyncEnabled,
+    setCalendarSyncEnabled,
+    requestPermission: requestCalendarPermission,
+    syncNow,
+    syncing: calendarSyncing,
+  } = useCalendarSync();
+
+  const [calendarBusy, setCalendarBusy] = useState(false);
+
+  const onCalendarSyncChange = useCallback(
+    async (value: boolean) => {
+      if (calendarBusy) return;
+      setCalendarBusy(true);
+      try {
+        await setCalendarSyncEnabled(value);
+        if (value && isIOS) {
+          const ok = await requestCalendarPermission();
+          if (ok) await syncNow();
+        }
+      } catch (e) {
+        if (__DEV__) console.warn("[Settings] calendar sync toggle", e);
+      } finally {
+        setCalendarBusy(false);
+      }
+    },
+    [
+      calendarBusy,
+      setCalendarSyncEnabled,
+      isIOS,
+      requestCalendarPermission,
+      syncNow,
+    ]
+  );
 
   // =========================
   // Notificaciones
@@ -365,28 +402,42 @@ export default function SettingsScreen() {
         </View>
 
         {/* =========================
-          CALENDARIO (entry)
+          CALENDARIO iOS
          ========================= */}
-        {/* <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Calendario</Text>
-          <Text style={styles.sectionSubtitle}>
-            Sincroniza hábitos para verlos en Apple/Google Calendar.
-          </Text>
+        {isIOS && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Calendario</Text>
+            <Text style={styles.sectionSubtitle}>
+              Sincroniza hábitos con la app Calendario de Apple. Aparecen en el
+              calendario "Dayloop" en color amarillo.
+            </Text>
 
-          <View style={styles.divider} />
+            <View style={styles.divider} />
 
-          <Link href="/settings/calendar-sync" asChild>
-            <Pressable style={styles.linkRow}>
+            <View style={styles.row}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={styles.rowTitle}>Sincronizar hábitos</Text>
+                <Text style={styles.rowTitle}>
+                  Sincronizar con Calendario iOS
+                </Text>
                 <Text style={styles.rowSubtitle}>
-                  Configura permisos y cómo se reflejan los hábitos.
+                  {calendarSyncEnabled
+                    ? "Hábitos visibles en Calendario. Se actualiza al crear, editar o eliminar."
+                    : "Actívalo para ver tus hábitos en la app Calendario."}
                 </Text>
               </View>
-              <Text style={styles.linkArrow}>›</Text>
-            </Pressable>
-          </Link>
-        </View> */}
+              <Switch
+                value={calendarSyncEnabled}
+                onValueChange={onCalendarSyncChange}
+                disabled={calendarBusy || calendarSyncing}
+                thumbColor={colors.text}
+                trackColor={{
+                  false: "rgba(255,255,255,0.18)",
+                  true: colors.primary,
+                }}
+              />
+            </View>
+          </View>
+        )}
 
         {/* =========================
           PRIVACIDAD

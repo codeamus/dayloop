@@ -15,6 +15,7 @@ import {
   type TimeBlock,
 } from "@/presentation/components/TimeBlocksSelector";
 import { useToast } from "@/presentation/components/ToastProvider";
+import { useCalendarSync } from "@/presentation/hooks/useCalendarSync";
 import { useHabit } from "@/presentation/hooks/useHabit";
 import { useHabitMonthlyStats } from "@/presentation/hooks/useHabitMonthlyStats";
 import { useHabitStreak } from "@/presentation/hooks/useHabitStreak";
@@ -159,6 +160,7 @@ export default function EditHabitScreen() {
 
   const { toggle: toggleForDate } = useToggleHabitForDate(habitId);
   const { show } = useToast();
+  const { calendarSyncEnabled, syncNow } = useCalendarSync();
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -436,12 +438,14 @@ export default function EditHabitScreen() {
       // 1) Persistir cambios del hábito
       await container.updateHabit.execute(updated);
 
-      // 2) ✅ Reprogramar notificaciones usando el scheduler (respeta weekly/monthly y evita duplicados)
+      // 2) Reprogramar notificaciones (respeta weekly/monthly)
       if (reminderOffsetMinutes === null) {
         await cancelHabitNotificationsByHabitId(updated.id);
       } else {
         await rescheduleHabitNotificationsForHabit(updated, { horizonDays: 30 });
       }
+
+      if (calendarSyncEnabled) await syncNow();
 
       await refreshMonthly();
       router.back();
@@ -462,10 +466,9 @@ export default function EditHabitScreen() {
           text: "Eliminar",
           style: "destructive",
           onPress: async () => {
-            // ✅ Cancela TODAS las notificaciones del hábito (las guardadas en SQLite)
             await cancelHabitNotificationsByHabitId(habit.id);
-
             await container.deleteHabit.execute(habit.id);
+            if (calendarSyncEnabled) await syncNow();
             router.back();
           },
         },
