@@ -73,7 +73,7 @@ export default function SettingsScreen() {
       isIOS,
       requestCalendarPermission,
       syncNow,
-    ]
+    ],
   );
 
   // =========================
@@ -148,14 +148,14 @@ export default function SettingsScreen() {
       if (!ok) {
         Alert.alert(
           "Notificaciones desactivadas",
-          "Para activarlas debes hacerlo desde Ajustes del teléfono (Notificaciones → Dayloop)."
+          "Para activarlas debes hacerlo desde Ajustes del teléfono (Notificaciones → Dayloop).",
         );
       }
     } catch (e) {
       console.error("[Settings] requestPermissionsAsync failed", e);
       Alert.alert(
         "Error",
-        "No se pudieron solicitar permisos de notificaciones. Intenta de nuevo."
+        "No se pudieron solicitar permisos de notificaciones. Intenta de nuevo.",
       );
     } finally {
       setBusy(false);
@@ -195,7 +195,7 @@ export default function SettingsScreen() {
               await AsyncStorage.clear();
               Alert.alert(
                 "Listo",
-                "La app quedó limpia (como recién instalada)."
+                "La app quedó limpia (como recién instalada).",
               );
             } catch (e) {
               console.error("[Settings] resetApp error", e);
@@ -205,7 +205,7 @@ export default function SettingsScreen() {
             }
           },
         },
-      ]
+      ],
     );
   }
 
@@ -234,7 +234,7 @@ export default function SettingsScreen() {
       if (!pkg) {
         Alert.alert(
           "No disponible",
-          "No se pudo obtener el package de Android."
+          "No se pudo obtener el package de Android.",
         );
         return;
       }
@@ -495,7 +495,7 @@ export default function SettingsScreen() {
 
           <View style={styles.divider} />
 
-          <Link href="https://codeamus.dev/dayloop/terms" asChild>
+          <Link href="https://www.dayloop.cl/terms" asChild>
             <Pressable style={styles.linkRow}>
               <Text style={styles.linkText}>Términos</Text>
               <Text style={styles.linkArrow}>›</Text>
@@ -504,7 +504,7 @@ export default function SettingsScreen() {
 
           <View style={{ height: 10 }} />
 
-          <Link href="https://codeamus.dev/dayloop/privacy" asChild>
+          <Link href="https://www.dayloop.cl/privacy" asChild>
             <Pressable style={styles.linkRow}>
               <Text style={styles.linkText}>Privacidad</Text>
               <Text style={styles.linkArrow}>›</Text>
