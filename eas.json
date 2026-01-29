@@ -30,17 +30,10 @@
       "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release"
-      },
-      "submit": true
+      }
     }
   },
   "submit": {
-    "preview": {
-      "android": {
-        "track": "internal"
-      },
-      "ios": {}
-    },
     "production": {
       "android": {
         "track": "production"
