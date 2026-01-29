@@ -4,6 +4,8 @@
     "slug": "dayloop",
     "version": "1.1.1",
     "updates": {
+      "url": "https://u.expo.dev/9bfb370d-15bf-43f9-86d8-f450b4090343",
+      "checkOnLaunch": "NEVER",
       "fallbackToCacheTimeout": 0
     },
     "runtimeVersion": {
